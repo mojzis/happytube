@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "happytube"
+version = "0.0.1"
+description = "nicer videos from youtube"
+authors = ["mojzis"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+dlt = { version = "^1.2.0", extras = ["duckdb"] }
+python = ">=3.12,<3.13"
+google-auth-oauthlib = "^1.2.1"
+google-api-python-client = "^2.149.0"
+rich = "^13.9.2"
+ipython = "^8.28.0"
+python-dotenv = "^1.0.1"
+pandas = "^2.2.3"
+anthropic = "^0.37.1"
+pytest = "^8.3.3"
+
+
+[tool.poetry.group.dev.dependencies]
+marimo = "^0.9.14"
+ruff = "^0.7.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
