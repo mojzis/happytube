@@ -15,11 +15,21 @@ function onYouTubeIframeAPIReady() {
 }
 
 /**
- * Load videos from the backend API
+ * Load videos from backend API (Flask) or static JSON file (GitHub Pages)
  */
 async function loadVideos() {
     try {
-        const response = await fetch('/api/videos');
+        // Try Flask API first (for local development)
+        let response;
+        try {
+            response = await fetch('/api/videos');
+            if (!response.ok) throw new Error('API not available');
+        } catch (apiError) {
+            // Fallback to static JSON (for GitHub Pages deployment)
+            console.log('API not available, loading from static JSON');
+            response = await fetch('videos.json');
+        }
+
         videos = await response.json();
         filteredVideos = [...videos];
 
@@ -33,7 +43,7 @@ async function loadVideos() {
     } catch (error) {
         console.error('Error loading videos:', error);
         document.getElementById('videoList').innerHTML =
-            '<div class="loading">Error loading videos</div>';
+            '<div class="loading">Error loading videos. Make sure videos.json exists.</div>';
     }
 }
 

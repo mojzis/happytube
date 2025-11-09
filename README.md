@@ -22,10 +22,13 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 # Run the main pipeline to fetch and rate videos
 poetry run python -m happytube.main
 
-# Start the web player
+# Option 1: Run locally (development mode)
 poetry run python -m happytube.web.server
+# Access at http://127.0.0.1:5000
 
-# Access the player at http://127.0.0.1:5000
+# Option 2: Deploy to GitHub Pages (static mode)
+poetry run python -m happytube.web.export
+# See happytube/web/DEPLOYMENT.md for deployment instructions
 ```
 
 ## Web Player
@@ -37,8 +40,27 @@ The web player provides a controlled YouTube viewing experience:
 - Keyboard navigation (arrow keys or n/p)
 - Auto-play next video option
 - Fullscreen support
+- **Deploy to GitHub Pages for free** - no backend required!
 
-See `happytube/web/README.md` for more details.
+### Deployment
+
+Deploy your curated video collection to GitHub Pages:
+
+```bash
+# Export videos to static files
+poetry run python -m happytube.web.export
+
+# Or use the interactive deployment script
+./scripts/deploy_web.sh
+```
+
+See `happytube/web/DEPLOYMENT.md` for detailed deployment instructions including:
+- GitHub Pages setup
+- Netlify/Vercel deployment
+- GitHub Actions automation
+- Custom domains
+
+See `happytube/web/README.md` for player details.
 
 ## Pipeline Details
 
