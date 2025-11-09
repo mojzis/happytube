@@ -32,6 +32,14 @@ poetry run ruff format .
 poetry run pytest tests/utils_test.py::test_function_name -v
 ```
 
+### Web Player
+```bash
+# Start the web player (after running main application)
+poetry run python -m happytube.web.server
+
+# Access at http://127.0.0.1:5000
+```
+
 ## Architecture
 
 ### Core Pipeline Flow
@@ -49,6 +57,12 @@ poetry run pytest tests/utils_test.py::test_function_name -v
    - Processes videos with happiness ≥ 3
    - Generates improved descriptions via Claude
    - Maintains CSV format for data exchange
+
+4. **Web Player** (`web/`)
+   - Flask-based web interface for video playback
+   - Controlled YouTube embed with disabled recommendations
+   - Playlist navigation and search functionality
+   - Only shows curated videos from the pipeline
 
 ### Key Components
 
@@ -72,6 +86,11 @@ data/
 └── fetched/
     ├── lists/          # Search results
     └── videos/         # Video details
+
+happytube/web/          # Web player
+├── server.py           # Flask backend
+├── static/             # CSS, JS assets
+└── templates/          # HTML templates
 ```
 
 ## Important Notes
