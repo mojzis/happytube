@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyTube Player</title>
+    <meta name="description" content="Curated collection of happy YouTube videos - watch without distractions">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar with video playlist -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📺 HappyTube</h2>
+                <p class="subtitle">Curated Happy Videos</p>
+            </div>
+
+            <div class="playlist-controls">
+                <input type="text" id="searchBox" placeholder="Search videos..." />
+                <div class="filter-controls">
+                    <label>
+                        <input type="checkbox" id="autoplayNext" checked>
+                        Auto-play next
+                    </label>
+                </div>
+            </div>
+
+            <div id="videoList" class="video-list">
+                <div class="loading">Loading videos...</div>
+            </div>
+        </aside>
+
+        <!-- Main player area -->
+        <main class="player-area">
+            <div class="player-wrapper">
+                <div id="player"></div>
+            </div>
+
+            <div class="video-info">
+                <h1 id="videoTitle">Select a video to start</h1>
+                <p class="channel-title" id="channelTitle"></p>
+                <div class="video-description">
+                    <p id="videoDescription"></p>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="prevBtn" class="control-btn">⏮ Previous</button>
+                <button id="nextBtn" class="control-btn">Next ⏭</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="player.js"></script>
+</body>
+</html>

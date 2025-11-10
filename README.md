@@ -1,10 +1,73 @@
+# HappyTube
 
-## Happy tube
+A Python application that analyzes YouTube videos to identify and enhance "happy" content. It fetches videos from YouTube API, uses Claude AI to assess happiness scores, and provides a curated web player for viewing.
 
-- fetch videos from search - per category & length & order
-- asses from title & description whether they seem happy + add "publishable"
-- fetch details (?) (not sure whether entirely necessary now ?)
-- [nth] fetch comments & asses whether happy 
+## Features
+
+- **Video Fetching**: Search and fetch videos from YouTube API by category, length, and order
+- **AI Assessment**: Use Claude AI to assess video happiness from title & description
+- **Web Player**: Simple, controlled video player with disabled YouTube recommendations
+- **Curated Playlists**: Only display videos that meet happiness criteria
+
+## Quick Start
+
+```bash
+# Install dependencies
+poetry install
+
+# Set up environment variables (.env file)
+YTKEY=your_youtube_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# Run the main pipeline to fetch and rate videos
+poetry run python -m happytube.main
+
+# Option 1: Run locally (development mode)
+poetry run python -m happytube.web.server
+# Access at http://127.0.0.1:5000
+
+# Option 2: Deploy to GitHub Pages (static mode)
+poetry run python -m happytube.web.export
+# See happytube/web/DEPLOYMENT.md for deployment instructions
+```
+
+## Web Player
+
+The web player provides a controlled YouTube viewing experience:
+
+- Embeds videos with disabled recommendations and related content
+- Search and filter through your curated video collection
+- Keyboard navigation (arrow keys or n/p)
+- Auto-play next video option
+- Fullscreen support
+- **Deploy to GitHub Pages for free** - no backend required!
+
+### Deployment
+
+Deploy your curated video collection to GitHub Pages:
+
+```bash
+# Export videos to static files
+poetry run python -m happytube.web.export
+
+# Or use the interactive deployment script
+./scripts/deploy_web.sh
+```
+
+See `happytube/web/DEPLOYMENT.md` for detailed deployment instructions including:
+- GitHub Pages setup
+- Netlify/Vercel deployment
+- GitHub Actions automation
+- Custom domains
+
+See `happytube/web/README.md` for player details.
+
+## Pipeline Details
+
+- Fetch videos from search - per category & length & order
+- Assess from title & description whether they seem happy + add "publishable"
+- Fetch details (?) (not sure whether entirely necessary now ?)
+- [nth] fetch comments & assess whether happy
 - [nth] statistics about channels - maybe we could rely more on known channels ?
 
 ### storage
