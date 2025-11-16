@@ -20,7 +20,11 @@ def extract_video_info(item: dict) -> dict | None:
     try:
         # Handle both search results and video details format
         if "id" in item:
-            video_id = item["id"].get("videoId") if isinstance(item["id"], dict) else item["id"]
+            video_id = (
+                item["id"].get("videoId")
+                if isinstance(item["id"], dict)
+                else item["id"]
+            )
         else:
             return None
 
@@ -100,7 +104,9 @@ def export_to_static(output_path: Path, data_dir: Path | None = None) -> None:
 
     if not videos:
         logger.warning("No videos found to export!")
-        logger.info("Make sure to run 'poetry run python -m happytube.main' first to fetch videos")
+        logger.info(
+            "Make sure to run 'poetry run python -m happytube.main' first to fetch videos"
+        )
         # Create empty file for consistency
         videos = []
 
