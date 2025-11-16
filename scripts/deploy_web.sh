@@ -16,10 +16,10 @@ fi
 # Step 1: Export videos to static JSON
 echo ""
 echo "📊 Step 1: Exporting videos to static JSON..."
-poetry run python -m happytube.web.export
+uv run python -m happytube.web.export
 
 if [ $? -ne 0 ]; then
-    echo "❌ Export failed. Make sure you've run 'poetry run python -m happytube.main' first."
+    echo "❌ Export failed. Make sure you've run 'uv run python -m happytube.main' first."
     exit 1
 fi
 
