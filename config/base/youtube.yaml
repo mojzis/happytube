@@ -1,0 +1,50 @@
+version: "1.0"
+
+searches:
+  music_search:
+    name: "Music Videos"
+    description: "Search for music videos from Czech Republic"
+    params:
+      part: "snippet"
+      type: "video"
+      regionCode: "CZ"
+      videoDuration: "medium"
+      videoCategoryId: 15  # Music
+      order: "viewCount"
+      safeSearch: "strict"
+      videoEmbeddable: true
+      relevanceLanguage: "en"
+      videoDimension: "2d"
+      maxResults: 50
+
+  educational_search:
+    name: "Educational Content"
+    description: "Search for educational videos"
+    params:
+      part: "snippet"
+      type: "video"
+      regionCode: "US"
+      videoDuration: "medium"
+      videoCategoryId: 27  # Education
+      order: "relevance"
+      safeSearch: "strict"
+      videoEmbeddable: true
+      relevanceLanguage: "en"
+      videoDimension: "2d"
+      maxResults: 30
+
+  entertainment_search:
+    name: "Entertainment Videos"
+    description: "Search for entertainment videos from Czech Republic"
+    params:
+      part: "snippet"
+      type: "video"
+      regionCode: "CZ"
+      videoDuration: "medium"
+      videoCategoryId: 24  # Entertainment
+      order: "viewCount"
+      safeSearch: "strict"
+      videoEmbeddable: true
+      relevanceLanguage: "en"
+      videoDimension: "2d"
+      maxResults: 50

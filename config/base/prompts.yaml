@@ -1,0 +1,39 @@
+version: "1.0"
+
+prompts:
+  happiness_v1:
+    name: "Happiness Assessment JSON v1"
+    version: "1.0"
+    model: "claude-3-opus-20240229"
+    max_tokens: 4096
+    template: |
+      Rate the happiness of the videos provided in the list, there is always id, title, description.
+      The rating should be from 1 to 5, where 1 is the least happy and 5 is the happiest.
+      Please provide the answer in json format (no extra text, just the response), a list of items with `id` and `happiness`.
+
+  happiness_v2:
+    name: "Happiness Assessment CSV v2"
+    version: "2.0"
+    model: "claude-3-opus-20240229"
+    max_tokens: 4096
+    template: |
+      {csv_content}
+
+      Rate the happiness of the videos provided in the list, there is always id, title, description.
+      The rating should be from 1 to 5, where 1 is the least happy and 5 is the happiest.
+      Please provide the answer in csv format (no extra text, just the response), just 2 columns: `id` and `happiness`.
+
+  enhance_description_v1:
+    name: "Description Enhancement v1"
+    version: "1.0"
+    model: "claude-3-opus-20240229"
+    max_tokens: 2048
+    template: |
+      The next text is a list of video ids in csv, there is always video_id, description.
+      Please determine the language of the descriptions.
+      Go through the video descriptions and for those in english remove all text that doesn't actually describe the video - call to subscribe, visit some page and so on (a sentence containing a link is most likely not describing the video).
+      Otherwise leave the description intact, including emoticons.
+
+      Please provide the answer in csv format (no extra text, just the response), just 3 columns: `id`, `language` and `description_improved` Please embed the `description_improved` column in quotes.
+
+      {csv_content}

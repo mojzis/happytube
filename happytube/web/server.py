@@ -4,10 +4,8 @@ Serves curated YouTube videos with controlled playback interface.
 """
 
 import json
-import os
 from pathlib import Path
 
-import pandas as pd
 from flask import Flask, jsonify, render_template
 
 app = Flask(__name__)
@@ -50,7 +48,11 @@ def extract_video_info(item):
     try:
         # Handle both search results and video details format
         if "id" in item:
-            video_id = item["id"].get("videoId") if isinstance(item["id"], dict) else item["id"]
+            video_id = (
+                item["id"].get("videoId")
+                if isinstance(item["id"], dict)
+                else item["id"]
+            )
         else:
             return None
 
