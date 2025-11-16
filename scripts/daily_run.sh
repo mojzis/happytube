@@ -39,7 +39,7 @@ fi
 # Run full pipeline
 log "Running HappyTube pipeline..."
 
-if poetry run happytube run-all \
+if uv run happytube run-all \
     --category Music \
     --max-videos 50 \
     --date "$DATE" 2>&1 | tee -a "$LOG_FILE"; then
@@ -64,7 +64,7 @@ if poetry run happytube run-all \
         # Optional: Deploy to web player
         # Uncomment to automatically export and deploy to GitHub Pages
         # log "Exporting to web player..."
-        # poetry run python -m happytube.web.export 2>&1 | tee -a "$LOG_FILE"
+        # uv run python -m happytube.web.export 2>&1 | tee -a "$LOG_FILE"
         # if [ -d "happytube/web/static" ]; then
         #     log "Web export completed"
         #     # You can add git commands here to commit and push

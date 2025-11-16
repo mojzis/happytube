@@ -33,26 +33,26 @@ happytube fetch --help
 ### Development Environment
 ```bash
 # Install dependencies
-poetry install
+uv sync
 
 # Run the modernized CLI pipeline
 happytube run-all --category Music
 
 # Run the legacy main application (deprecated)
-poetry run python -m happytube.main
+uv run python -m happytube.main
 
 # Interactive development environment
 ./scripts/ip.sh  # or: ipython -i happytube/ip.py
 
 # Run tests
-poetry run pytest
+uv run pytest
 
 # Run specific test file
-poetry run pytest tests/test_pipeline.py -v
+uv run pytest tests/test_pipeline.py -v
 
 # Lint code
-poetry run ruff check .
-poetry run ruff format .
+uv run ruff check .
+uv run ruff format .
 ```
 
 ### Daily Automation
@@ -68,7 +68,7 @@ poetry run ruff format .
 ### Web Player
 ```bash
 # Start the web player for local development (after running main application)
-poetry run python -m happytube.web.server
+uv run python -m happytube.web.server
 
 # Access at http://127.0.0.1:5000
 ```
@@ -76,7 +76,7 @@ poetry run python -m happytube.web.server
 ### Static Deployment
 ```bash
 # Export videos to static JSON for GitHub Pages deployment
-poetry run python -m happytube.web.export
+uv run python -m happytube.web.export
 
 # Or use the deployment script (interactive)
 ./scripts/deploy_web.sh
@@ -160,7 +160,7 @@ Stage 4: REPORT   → stages/report/YYYY-MM-DD.html + parquet exports
   
 - **Configuration**:
   - Environment variables loaded from `.env`
-  - Poetry for dependency management (Python >=3.12, <3.13)
+  - uv for dependency management (Python >=3.12, <3.13)
 
 ### Storage Structure
 ```
@@ -371,7 +371,7 @@ happytube run-all --category Music
 
 ## Important Notes
 
-- The project uses modern Python tooling (Poetry, Ruff) instead of traditional pip/flake8
+- The project uses modern Python tooling (uv, Ruff) instead of traditional pip/flake8
 - All async operations and API calls should include proper error handling
 - Data processing uses markdown files with YAML frontmatter for stage-based architecture
 - Legacy CSV format is still used for Claude API communication
