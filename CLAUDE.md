@@ -49,6 +49,14 @@ poetry run python -m happytube.web.export
 ./scripts/deploy_web.sh
 ```
 
+### GitHub Pages Deployment
+The project includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically:
+- Builds the static site
+- Exports video data
+- Deploys to GitHub Pages
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for full setup instructions.
+
 ## Architecture
 
 ### Core Pipeline Flow
