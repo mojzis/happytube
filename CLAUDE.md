@@ -25,6 +25,9 @@ trusted channels (see Project plan).
 - `uv run poe test` — run tests only
 - `uv run poe check-all` — run all checks including dead-code and unused-deps
 
+CI (`.github/workflows/ci.yml`) runs format, lint, ty, zorilla, biston and pytest on
+every PR and push to `main`; pysentry is advisory.
+
 ### HappyTube CLI
 
 ```bash
@@ -66,7 +69,7 @@ uv run python -m happytube.web.export   # static videos.json for GitHub Pages
 ```
 
 `.github/workflows/deploy.yml` builds and deploys `src/happytube/web/static` to GitHub
-Pages; see [DEPLOYMENT.md](DEPLOYMENT.md). Known gap: the player and export read
+Pages — manual trigger only for now; see [DEPLOYMENT.md](DEPLOYMENT.md). Known gap: the player and export read
 legacy raw JSON from `data/fetched/`, which nothing writes any more (the stages write
 `stages/`), so the export currently yields 0 videos.
 
