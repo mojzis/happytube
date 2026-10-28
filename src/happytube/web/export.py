@@ -59,8 +59,9 @@ def _parser() -> argparse.ArgumentParser:
         "--stages-dir",
         type=Path,
         default=Path(os.environ.get("HAPPYTUBE_STAGES_DIR", "stages")),
-        help="Stage data directory (env: HAPPYTUBE_STAGES_DIR; default: stages/ "
-        "in the current directory).",
+        help="Stage data directory to read trusted/ from (env: "
+        "HAPPYTUBE_STAGES_DIR; default: stages/ in the current directory). Only "
+        "where the export reads; the trusted commands write stages/ in the cwd.",
     )
     parser.add_argument(
         "--channels-dir",

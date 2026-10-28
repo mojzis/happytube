@@ -51,8 +51,9 @@ available yet").
 
 Or let the daily script do both: `HAPPYTUBE_PIPELINE=trusted HAPPYTUBE_PUSH=1
 ./scripts/daily_run.sh` commits only `stages/trusted/` (also after a partly
-failed run that wrote files), pushes, and exits non-zero if the commit or push
-fails. It pushes the current branch; only `main` deploys.
+failed run that wrote files), pushes on every run (so a commit left local by
+a failed push goes out next time), and exits non-zero if the commit or push
+fails. No `stages/trusted/` yet → nothing is committed or pushed. It pushes the current branch; only `main` deploys.
 
 ## Local preview
 

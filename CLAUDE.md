@@ -44,8 +44,9 @@ happytube --help                                       # or <command> --help
 
 Run via `uv run happytube …`. Daily automation: `./scripts/daily_run.sh` (cron-ready;
 legacy by default, `HAPPYTUBE_PIPELINE=trusted` runs `trusted run` instead; with
-`HAPPYTUBE_PUSH=1` too, it then commits only `stages/trusted/` and pushes, also after
-a failed run that wrote files — off by default; runs in its own repo unless
+`HAPPYTUBE_PUSH=1` too, it then commits only `stages/trusted/` (if anything
+changed, also after a failed run that wrote files) and pushes every run, so a push
+that failed earlier is retried — off by default; runs in its own repo unless
 `HAPPYTUBE_DIR` is set).
 
 ### Trusted pipeline (decision 0009)
@@ -150,7 +151,10 @@ non-empty `enhanced_description` **and** the channel is approved *now*; fields f
 assess, only the description from enhance; newest `published_at` first. One pure
 rule, `trusted.player.select_videos`, used by `GET /player/videos.json` (live per
 request from `--stages-dir` / `HAPPYTUBE_STAGES_DIR`, default `stages/` in the cwd)
-and the export. A bad stage file is skipped with a warning naming it. `player.js`
+and the export. That option / env only says where the player and the export
+**read**; the `trusted` commands always write `stages/` in the cwd. `serve` warns at
+start (and the route logs once) when `<stages-dir>/trusted/` is missing; a stage dir
+not named `YYYY-MM-DD` is skipped with a warning. A bad stage file is skipped with a warning naming it. `player.js`
 fetches `videos.json` relative to the page (one path, local and Pages). The export
 writes `web/static/videos.json` (git-ignored build product); a missing
 `stages/trusted/` or registry exits 1, an empty selection warns, exit 0.
