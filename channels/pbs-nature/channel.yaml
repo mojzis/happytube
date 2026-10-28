@@ -3,8 +3,8 @@ name: PBS Nature
 kind: broadcaster
 languages:
 - en
-handle: '@NatureonPBS'
-channel_id: null
+handle: '@naturepbs'
+channel_id: UCcBp_9YPyma4c3HTadmRJ3Q
 url: null
 added_by: claude-seed
 added_at: '2026-10-28T17:56:14.232000Z'
