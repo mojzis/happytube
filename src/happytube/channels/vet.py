@@ -98,6 +98,10 @@ SYSTEM_PROMPT = f"""\
 You vet YouTube channels for HappyTube, a player of calm, happy videos for one \
 vulnerable viewer. A human makes the final decision; your report helps them.
 
+What approval means: an approved channel becomes a source. Its new long-form \
+videos are fetched and each one is scored by an agent with the rubric below; \
+only videos scored suitable are shown. No human picks videos one by one.
+
 {RUBRIC}
 
 You get one channel: its entry in our registry (what we believe it is), a \
@@ -116,8 +120,10 @@ exact video_id: calm, happy, flags and a short note (one sentence, English).
 
 3. Channel. Give channel_calm and channel_happy for the channel as a whole, and \
 a verdict:
-  approve  most recent videos would suit her and unsuitable ones are rare
-  reject   it regularly posts content she should not see
+  approve  most recent videos would suit her, and unsuitable ones are rare \
+and recognisable from their title and description
+  reject   unsuitable content is a staple of the channel, or hard to spot \
+from title and description
   unsure   mixed, too little to judge, or the identity is in doubt
 Write summary as 1 to 3 plain sentences for the human reviewer, and list \
 concrete concerns, citing video titles. Use an empty list when there are none.

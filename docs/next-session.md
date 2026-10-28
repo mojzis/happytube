@@ -41,8 +41,6 @@ _Updated 2026-10-28._
   5c player port to FastAPI.)
 - Video review record format and where it lives (per channel `videos/<id>/reviews/`
   vs a top-level `videos/`).
-- Does a video need a human approval, or is an approved channel + suitable score
-  enough (vet scores vary run to run)?
 - Replace legacy assess (happiness 1–5) with the rubric, or keep both for now?
 
 ## Decided
@@ -50,4 +48,7 @@ _Updated 2026-10-28._
 - Runner: manual; the user drives the loop from the session.
 - Registry layout (0003); evidence (0004); agent vetting (0005); web stack FastAPI +
   htmx (0006); review UI local-only, channels only, reviewer cookie (0007).
+- Channel approval = source; agents gate each video with the rubric; humans only
+  spot-check videos to test the algorithm (0008). Vet prompt changed: old vets
+  are stale (`channels vet --all --force` to refresh, costs credit).
 - Merge PRs with a merge commit (full history), not squash.
