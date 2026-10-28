@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Queue{% endblock %}
+{% block content %}
+<h1>Channel queue</h1>
+<form class="filters" method="get" action="/channels"
+      hx-get="/channels" hx-target="#queue" hx-swap="outerHTML" hx-push-url="true"
+      hx-trigger="change, submit">
+  <label>Status
+    <select name="status">
+      <option value="">any</option>
+      {% for s in statuses %}<option value="{{ s }}"{% if filters.status == s %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Kind
+    <select name="kind">
+      <option value="">any</option>
+      {% for k in kinds %}<option value="{{ k }}"{% if filters.kind == k %} selected{% endif %}>{{ k }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Language
+    <select name="language">
+      <option value="">any</option>
+      {% for lang in languages %}<option value="{{ lang }}"{% if filters.language == lang %} selected{% endif %}>{{ lang }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a href="/channels">clear</a>
+</form>
+{% include "_queue_table.html" %}
+{% endblock %}

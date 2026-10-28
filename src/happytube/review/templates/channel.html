@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ channel.name }}{% endblock %}
+{% block content %}
+<p><a href="/channels">← queue</a></p>
+<h1>{{ channel.name }} {% include "_status_badge.html" %}</h1>
+
+<section class="card">
+  <h2>Channel</h2>
+  <dl class="facts">
+    <dt>Slug</dt><dd>{{ channel.slug }}</dd>
+    <dt>Kind</dt><dd>{{ channel.kind }}</dd>
+    <dt>Languages</dt><dd>{{ channel.languages|join(", ") }}</dd>
+    <dt>Handle</dt><dd>{{ channel.handle or "—" }}</dd>
+    <dt>Channel id</dt><dd>{% if channel.channel_id %}<a href="https://www.youtube.com/channel/{{ channel.channel_id }}" rel="noopener noreferrer" target="_blank">{{ channel.channel_id }}</a>{% else %}<span class="flag">not resolved</span>{% endif %}</dd>
+    <dt>URL</dt><dd>{{ channel.url or "—" }}</dd>
+    <dt>Notes</dt><dd class="text">{{ channel.notes or "—" }}</dd>
+    <dt>Added</dt><dd>by {{ channel.added_by }}, {{ channel.added_at|dt }}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Evidence <span class="muted">(latest snapshot)</span></h2>
+  {% if ev %}
+  {% set e = ev.evidence %}
+  <p class="resolved">Resolved to: <strong>{{ e.title }}</strong></p>
+  <dl class="facts">
+    <dt>Custom URL</dt><dd>{{ e.custom_url or "—" }}</dd>
+    <dt>Country</dt><dd>{{ e.country or "—" }}</dd>
+    <dt>Subscribers</dt><dd>{{ e.subscriber_count|num }}</dd>
+    <dt>Videos</dt><dd>{{ e.video_count|num }}</dd>
+    <dt>Recent uploads</dt><dd>{{ ev.long_form_count }} long-form, {{ ev.shorts_count }} Shorts (Shorts by {{ e.shorts_source }})</dd>
+    <dt>Newest upload</dt><dd>{{ ev.newest_upload|dt }}</dd>
+    <dt>Fetched</dt><dd>{{ e.fetched_at|dt }}</dd>
+  </dl>
+  {% else %}
+  <p class="empty">No evidence yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Vet <span class="muted">(latest agent report)</span></h2>
+  {% if vet %}
+  {% set r = vet.report %}
+  <dl class="facts">
+    <dt>Verdict</dt><dd><span class="verdict verdict-{{ r.verdict }}">{{ r.verdict }}</span> (model said {{ r.model_verdict }})</dd>
+    <dt>Flags</dt><dd>{% for f in r.flags %}<span class="flag">{{ f }}</span> {% else %}none{% endfor %}</dd>
+    <dt>Identity match</dt><dd>{{ r.identity_match }}{% if r.identity_note %} — <span class="text">{{ r.identity_note }}</span>{% endif %}</dd>
+    <dt>Channel calm / happy</dt><dd>{{ r.channel_calm }} / {{ r.channel_happy }}</dd>
+    <dt>Summary</dt><dd class="text">{{ r.summary or "—" }}</dd>
+    <dt>Concerns</dt><dd>{% if r.concerns %}<ul>{% for c in r.concerns %}<li>{{ c }}</li>{% endfor %}</ul>{% else %}none{% endif %}</dd>
+    <dt>Suitable</dt><dd>{{ r.suitable_count }}/{{ r.videos|length }} long-form; {{ r.shorts_skipped }} Shorts skipped</dd>
+    <dt>Vetted</dt><dd>{{ r.vetted_at|dt }} by {{ r.model }} (prompt v{{ r.prompt_version }}), snapshot {{ r.evidence_at|dt }}</dd>
+    <dt>File</dt><dd class="path">{{ vet.path }}</dd>
+  </dl>
+  {% if r.videos %}
+  <table class="videos">
+    <thead><tr><th></th><th>Title</th><th>Calm</th><th>Happy</th><th>Flags</th><th>Suitable</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for v in r.videos %}
+      <tr class="{{ 'suitable' if v.suitable else 'unsuitable' }}">
+        <td>{% if v.video_id is video_id %}<img src="https://i.ytimg.com/vi/{{ v.video_id }}/mqdefault.jpg" alt="" width="160" height="90" loading="lazy">{% endif %}</td>
+        <td>{% if v.video_id is video_id %}<a href="https://www.youtube.com/watch?v={{ v.video_id }}" rel="noopener noreferrer" target="_blank">{{ v.title }}</a>{% else %}{{ v.title }}{% endif %}</td>
+        <td>{{ v.calm }}</td>
+        <td>{{ v.happy }}</td>
+        <td>{% for f in v.flags %}<span class="flag">{{ f }}</span> {% endfor %}</td>
+        <td>{{ "yes" if v.suitable else "no" }}</td>
+        <td class="text">{{ v.note }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% else %}
+  <p class="empty">Not vetted.</p>
+  {% endif %}
+</section>
+
+{% include "_reviews.html" %}
+{% endblock %}

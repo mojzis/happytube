@@ -1,0 +1,39 @@
+<div id="queue">
+{% if total == 0 %}
+  <p class="empty">No channels in the registry.</p>
+{% else %}
+{% for title, rows in [("Needs human review", sections.needs_review), ("Reviewed", sections.reviewed)] %}
+  <section class="queue-section">
+    <h2>{{ title }} <span class="count">({{ rows|length }})</span></h2>
+    {% if rows %}
+    <table class="queue">
+      <thead>
+        <tr><th>Channel</th><th>Kind</th><th>Lang</th><th>Status</th><th>Vet</th><th>Suitable</th><th>Reviews (human / agent)</th></tr>
+      </thead>
+      <tbody>
+      {% for e in rows %}
+        {% set vet = e.latest_vet.report if e.latest_vet else none %}
+        {% set human = e.reviews|selectattr("role", "equalto", "human")|list|length %}
+        <tr{% if needs_attention(e) %} class="attention"{% endif %}>
+          <td><a href="/channels/{{ e.channel.slug }}">{{ e.channel.name }}</a><br><span class="slug">{{ e.channel.slug }}</span></td>
+          <td>{{ e.channel.kind }}</td>
+          <td>{{ e.channel.languages|join(", ") }}</td>
+          <td><span class="badge status-{{ e.status }}">{{ e.status }}</span></td>
+          <td>
+            {% if vet %}<span class="verdict verdict-{{ vet.verdict }}">{{ vet.verdict }}</span>{% for f in vet.flags %} <span class="flag">{{ f }}</span>{% endfor %}
+            {% elif is_unresolved(e) %}<span class="flag">unresolved</span>
+            {% else %}<span class="muted">not vetted</span>{% endif %}
+          </td>
+          <td>{% if vet %}{{ vet.suitable_count }}/{{ vet.videos|length }}{% else %}—{% endif %}</td>
+          <td>{{ human }} / {{ e.reviews|length - human }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">None{% if filters.status or filters.kind or filters.language %} matching the filters{% endif %}.</p>
+    {% endif %}
+  </section>
+{% endfor %}
+{% endif %}
+</div>
