@@ -7,11 +7,7 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "dlt[duckdb]>=1.2.0",
-    "google-auth-oauthlib>=1.2.1",
-    "google-api-python-client>=2.149.0",
     "rich>=13.9.2",
-    "ipython>=8.28.0",
     "python-dotenv>=1.0.1",
     "pandas>=2.2.3",
     "anthropic>=0.37.1",
@@ -21,11 +17,12 @@ dependencies = [
     "jinja2>=3.1.4",
     "pyarrow>=18.1.0",
     "click>=8.1.7",
+    "pyyaml>=6.0",
+    "requests>=2.32",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "marimo>=0.9.14",
     "ruff>=0.7.1",
 ]
 
