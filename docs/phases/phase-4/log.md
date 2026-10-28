@@ -6,3 +6,64 @@ combined verify → learnings.
 Decisions taken with the user before dev (2026-10-28): reviewer = name field
 remembered in a cookie (default from config); channels only (video queue → phase
 5); local only (127.0.0.1, no auth); package `review/` + `happytube serve`.
+
+## 1 — dev
+Report (verbatim JSON, abridged formatting):
+
+- commits: d8b4bd1 docs; 387d9be deps (fastapi 0.162, uvicorn 0.54, python-multipart
+  0.0.32, starlette 1.10; httpx dev); 4455e17 htmx 2.0.11 vendored (unpkg, sha256
+  matches npm tarball); f8d4e87 review app; cf1d929 `happytube serve`; 8170100
+  decision 0007, CLAUDE.md, architecture.
+- tests: 369 passed (was 298), coverage 78% (was 75%; review/queue.py 100%,
+  cli/serve.py 100%, review/app.py 98% — one unreachable ValidationError fallback).
+- real_run (curl, scratch copy, no keys): queue + htmx filter partial OK; detail for
+  zoo-praha / smithsonian (inactive) / ct-decko (unresolved) OK; 404 unknown slug;
+  htmx POST approve → OOB badge `approved`, notes escaped, cookie URL-encoded,
+  HttpOnly, SameSite=strict, 1 y; plain POST → 303; empty reviewer 422 nothing
+  written; forged Origin / Sec-Fetch-Site cross-site → 403; bad Host → 400; broken
+  channel.yaml → 500 naming file, no traceback; files only in the copy.
+- eyeball: queue order as specified; names sort without diacritic awareness (ČT with
+  C). Not checked in a real browser.
+- deviations: `create_app(bind_host=…)`; `_status_badge.html` for OOB, htmx target
+  is whole #reviews section; htmx `responseHandling` config to swap 422;
+  history-restore gets full page, `Vary: HX-Request`; cookie URL-encoded; unknown
+  filter value → 400; deptry ignores python-multipart (DEP002) + starlette (DEP003),
+  404 handler on Starlette HTTPException, vulture ignores for FastAPI/click
+  decorators + QueueSections fields; `channels_dir_option` shared in cli/channels.py.
+- unresolved: `--host 0.0.0.0` accepts only loopback Host + literal 0.0.0.0 (LAN IP
+  → 400); one broken file → whole queue 500 (as specified); no browser check.
+
+## 2a — review
+Verdict `ship`. Findings (verbatim, abridged):
+
+- R1 medium — htmx POST getting 400/403/404/500 shows nothing (responseHandling swaps
+  only 422); reproduced with broken channel.yaml → silent 500. Fix: swap error page
+  into `<main>` or `htmx:responseError` listener into a role=alert region; test.
+- R2 low — wildcard `--host` (0.0.0.0/::) warns, then 400s every real client; a
+  non-loopback IPv6 bind_host is never allowed (`host_name('fe80::1')` → None). Fix:
+  refuse wildcard binds with a hint; bracket bare IPv6 / use `ipaddress`; test; 0007.
+- R3 low — async routes do sync file I/O. Fix: plain `def`.
+- R4 low — parse_review/parse_filters return str-or-value unions; parse_filters(**)
+  untyped, KeyError on unexpected key. Fix: raise FormError; explicit params.
+- R5 low — every CLI command imports fastapi/uvicorn (~200 ms). Fix: import in serve().
+- R6 low — test naming/split/missing asserts (test_review_app.py:274,306;
+  test_cli_serve.py:271 ipv6 url).
+- R7 low — hand-rolled status constants (use HTTPStatus); review counts in Jinja.
+- Deviations: all accepted; diacritic sort accepted (not worth ICU for ~15 rows);
+  whole-queue 500 on broken file accepted (as specified).
+
+## 2b — QA
+Verdict `ship`. poe check green (369, 78%). Browser (Chrome, scratch copy): queue
+order per spec; htmx filter swaps + URL + back; detail pages incl. thumbnails,
+resolved-to, unresolved ct-decko; htmx approve updates reviews + badge, notes
+escaped; 422 shown in form, values kept; cookie prefill (HttpOnly) and
+HAPPYTUBE_REVIEWER prefill; no console errors; only i.ytimg.com external. Wheel
+contains templates/static, serves from /tmp. Concurrent CLI+web writes: 9/9 files,
+-2/-3 suffixes, nothing overwritten, latest verdict right. Old commands OK.
+Screenshots in session scratchpad `p4-qa-shots/` (not committed).
+
+- Q1 low — port in use: banner printed, then raw uvicorn `[Errno 98]`, exit 3.
+- Q2 low — `--host 0.0.0.0`: LAN IP Host → 400 (= R2).
+- Q3 low — installed wheel: default `--channels-dir` → `<venv>/lib/python3.12/channels`,
+  silently empty (preexisting PROJECT_ROOT default, shared with `channels`).
+- Q4 low — the two queue tables' columns don't line up.
