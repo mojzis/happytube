@@ -58,3 +58,21 @@ def get_settings() -> Settings:
         Settings instance loaded from environment
     """
     return Settings()
+
+
+class YouTubeSettings(BaseSettings):
+    """Only the YouTube key, for commands that need no Anthropic key.
+
+    Reads the same ``.env`` as ``Settings``; other keys in it are ignored.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    youtube_api_key: str = Field(
+        ..., alias="YTKEY", min_length=1, description="YouTube Data API key"
+    )

@@ -12,28 +12,7 @@ import requests
 
 from happytube.paths import LEGACY_FETCHED_DIR
 from happytube.utils import determine_text_script
-
-REQUEST_TIMEOUT_S = 30
-
-
-class YouTubeAPIError(RuntimeError):
-    """A YouTube Data API request returned a non-200 response."""
-
-    def __init__(self, endpoint: str, status_code: int, reason: str, detail: str = ""):
-        # Deliberately no URL: it carries the API key as a query parameter.
-        message = f"YouTube {endpoint} request failed: {status_code} {reason}"
-        if detail:
-            message += f" - {detail}"
-        super().__init__(message)
-        self.status_code = status_code
-
-
-def _api_error_detail(response: requests.Response) -> str:
-    """Return the ``error.message`` of a YouTube error body, or ``""``."""
-    try:
-        return str(response.json()["error"]["message"])
-    except (ValueError, KeyError, TypeError):
-        return ""
+from happytube.youtube import REQUEST_TIMEOUT_S, YouTubeAPIError, api_error_detail
 
 
 @dataclass
@@ -58,7 +37,7 @@ class YtQuery:
                 self.name,
                 response.status_code,
                 response.reason,
-                _api_error_detail(response),
+                api_error_detail(response),
             )
         self.data = response.json()["items"]
 
