@@ -85,9 +85,7 @@ def _assessed(record: StageRecord) -> _Assessed | None:
     return assessed
 
 
-def _description(record: StageRecord | None) -> str | None:
-    if record is None:
-        return None
+def _description(record: StageRecord) -> str | None:
     value = record.frontmatter.get("enhanced_description")
     if not isinstance(value, str):
         if value is not None:
