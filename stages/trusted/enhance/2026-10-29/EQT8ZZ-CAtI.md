@@ -1,0 +1,54 @@
+---
+video_id: EQT8ZZ-CAtI
+title: The Fascinating World Of Whales | BBC Earth
+channel_slug: bbc-earth
+channel_id: UCwmZiChSryoWQCZMIQezgTg
+channel_name: BBC Earth
+languages:
+- en
+published_at: '2026-08-01T14:00:07Z'
+duration_s: 1036
+shorts_source: uush
+fetched_at: '2026-10-28T23:45:23.815401Z'
+stage: trusted_enhance
+calm: 4
+happy: 4
+flags: []
+note: Whale behaviour and connections; calm ocean footage, some hunting mentioned.
+suitable: true
+model: claude-opus-5-5
+assessed_at: '2026-10-28T23:47:04.761859Z'
+rubric_version: 1
+enhanced_description: A look at whales in the ocean, their clever ways of hunting
+  and their unusual behaviour. It shows humpback whales and orcas feeding together,
+  a family of whales being filmed, and fin whales feeding up close.
+enhanced_at: '2026-10-28T23:52:23.741714Z'
+enhance_model: claude-opus-5-5
+---
+
+# The Fascinating World Of Whales | BBC Earth
+
+Witness the remarkable world of ocean giants, from their clever hunting strategies to their unique behaviours and extraordinary connections.
+
+#BBCEarth #Animals #Nature
+
+Subscribe: http://bit.ly/BBCEarthSub 
+Sign up to our newsletter for the latest news, updates and exclusives from BBC Earth https://www.bbcearth.com/newsletter
+
+Watch more: 
+Best of BBC Earth 🌍 https://bit.ly/BestOfBBCEarth
+Best Animal Fights 🥊 https://bit.ly/BestAnimalFights
+Videos over 10 minutes ⏰ https://bit.ly/3SHJCEJ
+Planet Earth III 🌍 https://bit.ly/PlanetEarthIIIPlaylist
+Frozen Planet II ❄️ https:/bit.ly/FrozenPlanetIIPlaylist
+Blue Planet II in 4K 🌊 https://bit.ly/BluePlanetII4kPlaylist
+
+Welcome to BBC EARTH! The world is an amazing place full of stories, beauty and natural wonder. Here you'll find 50 years worth of entertaining and thought-provoking natural history content. Dramatic, rare, and exclusive, nature doesn't get more exciting than this.
+
+This is a commercial page from BBC Studios. Service information and feedback: http://bbcworldwide.com/vod-feedback--contact-details.aspx
+
+00:00 Eden's Whales Adapt To New Hunting Technique
+03:08 Humpback Whales and Orcas Feed Together
+06:22 Filming a Family of Whales
+9:44 Can This Rescue Boat Rescue A Dying Sperm Whale?
+13:16 Getting Close to Feeding Fin Whales
