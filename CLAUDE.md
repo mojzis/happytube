@@ -138,7 +138,10 @@ reviews"). The queue is every assessed trusted video: unreviewed ones the player
 shows now first, then the other unreviewed, then reviewed (unreadable,
 disagreements, newest). One file per review in `video-reviews/<id>/`, append-only;
 each snapshots the agent's call (`agent_suitable`, `rubric_version`,
-`assessed_at`), and `stats` compares against that snapshot, not a later rescore.
+`assessed_at`; the last two `null` if the assess file lacks them — such a video is
+still queued, marked "incomplete assess"), and `stats` compares against that
+snapshot, not a later rescore. The UI form refuses (422) a review of a video
+rescored since the page was loaded.
 The latest *human* review decides; agent reviews are stored and never count. A
 human `unsuitable` (or an unreadable review file) hides the video from the player
 and the export; `suitable` never shows a video the agent scored unsuitable. Notes
@@ -312,8 +315,8 @@ from the repo root.
   `load_spot_checks`, `load_video`, `new_review`).
 - `records.py` — append-only record files shared by `channels/store.py` and
   `video_reviews.py` (stamp naming, `-N` collisions, ordered load, `StoreError`;
-  `ChannelStoreError` is an alias).
-- `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),
+  `ChannelStoreError` a subclass; unreadable / non-UTF-8 files are `StoreError` too).
+- `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`),
   `store.py` (`ChannelStore`, `derive_status`), `evidence.py` (pure API → `Evidence`
   builder, Shorts by `UUSH` ids or duration), `collect.py` (resolve / evidence
   runs), `vet.py` (pure vetting: flags, prompt, verdict rule, report) and
@@ -333,7 +336,7 @@ from the repo root.
 - `config/settings.py` (pydantic settings from `.env`), `config/config_manager.py`
   (YAML from `config/base/`).
 - `models/markdown.py` (`MarkdownFile`), `models/video.py` (`Video`, parquet export).
-- `utils/` — text-script detection, `utc_now_iso()`, `first_text()` for Claude
+- `utils/` — text-script detection, `utc_now_iso()`, time helpers (`as_utc`, `iso_z`, `utc_now`, `fmt_utc`), `slugify`, `first_text()` for Claude
   responses, logging setup. `paths.py` — `PROJECT_ROOT`.
 
 ### Storage Structure

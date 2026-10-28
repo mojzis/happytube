@@ -22,7 +22,10 @@ watches, not wait for a rubric change.
   (`human | agent`), `verdict` (`suitable | unsuitable | unsure`), optional rubric
   `flags`, `watched` (`full | part | title`), `notes`, `created_at` (UTC, `Z`), and
   a snapshot of the agent's call the reviewer compared with, copied from the assess
-  file at review time: `agent_suitable`, `rubric_version`, `assessed_at`. The video
+  file at review time: `agent_suitable`, `rubric_version`, `assessed_at` (the last
+  two `null` when that assess file lacked them: a video the player shows is always
+  reviewable). The UI refuses a review if the video was rescored since the page
+  was loaded. The video
   id is the directory, validated with `is_video_id` before any path is built.
 - **Derived, like channel status (0003):** the latest *human* review decides (by
   `created_at`, ties in filename order, so the later write wins). Agent reviews are

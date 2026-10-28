@@ -48,7 +48,8 @@ Current (`src/happytube/`):
   `new_review`).
 - `records.py` — append-only record files shared by the channel registry and the
   video reviews: timestamp naming, `-N` collision suffix, ordered loading,
-  `StoreError` (`ChannelStoreError` is an alias).
+  `StoreError` for any broken or unreadable file (`ChannelStoreError` is a
+  subclass for registry problems). Time and slug helpers live in `utils`.
 - `channels/` — channel registry: `Channel`, `Review` and `Evidence` models and
   `ChannelStore` (files under `channels/`). Status is derived from the latest human
   approve/reject; agent reviews never change it; a rejected channel is the blocklist

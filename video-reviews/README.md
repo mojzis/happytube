@@ -26,7 +26,8 @@ flags: [scary]            # rubric flags, optional
 watched: full             # full | part | title
 notes: Loud music halfway through.
 created_at: '2026-10-28T20:15:00Z'
-# The agent's call the reviewer compared with, copied from the assess file:
+# The agent's call the reviewer compared with, copied from the assess file
+# (rubric_version / assessed_at are null if that file lacked them):
 agent_suitable: true
 rubric_version: 1
 assessed_at: '2026-10-28T19:00:00Z'
