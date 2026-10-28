@@ -48,10 +48,13 @@ with `docs/process-learnings.md` as input. The orchestrating session runs:
 5. **learnings** subagent — writes `docs/phases/phase-N/learnings.md` and appends
    process lessons to `docs/process-learnings.md`.
 6. Orchestrator updates `docs/next-session.md`.
+7. Orchestrator pushes the branch, opens the PR and, once the user says so, merges
+   it. **The session ends when the PR is merged** — next-session.md is written for
+   the state after the merge.
 
 Working files per phase live in `docs/phases/phase-N/` (`context.md`, step briefs,
 `log.md` with verbatim agent reports, `learnings.md`). Each phase runs on its own
-branch; merge/PR only after the user says so.
+branch; merge only after the user says so.
 
 ## Backlog (from phase 0, not scheduled)
 

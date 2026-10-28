@@ -7,7 +7,7 @@ _Updated 2026-10-28._
 - Plan: `docs/plan.md` (phases 0–5 + backlog). Source idea:
   `~/git/ideas/projects/happytube/ideas/trusted-channels.md`.
 - Phase 0 merged to `main` (PR #6).
-- **Phase 1 done** on branch `phase-1-channels` (not pushed, no PR yet):
+- **Phase 1 done**, merged to `main` (PR #7):
   `happytube.channels` package (`Channel`/`Review` models, `ChannelStore`,
   `derive_status`, `filter_entries`), `happytube channels add/list/show/review`
   with `--json`, no API keys needed. 15 seed candidates in `channels/`
@@ -18,14 +18,15 @@ _Updated 2026-10-28._
 
 ## Next step
 
-1. User: review + merge phase 1 (push `phase-1-channels`, open PR).
-2. Start **phase 2 — channel evidence**: write `docs/phases/phase-2/context.md`, then
+1. Start **phase 2 — channel evidence**: write `docs/phases/phase-2/context.md`, then
    run the loop (same as phase 1; see learnings for brief tweaks: `--detach`
    worktrees, split review/QA scope, verify judges every fix deviation).
    Phase 2 scope (from plan): resolve handles → channel ids (`channels.list`
    `forHandle`), stats + recent uploads (RSS vs `playlistItems`), video durations
    (Shorts), cached per channel under `channels/<slug>/evidence/`; research note +
    decision record comparing fetch methods with quota math for 50/200/500 channels.
+2. End the session by opening the PR and merging it once the user says so (see
+   `docs/plan.md` → Per-phase loop, step 7).
 
 ## Open decisions (settle in phase 2 context.md)
 
