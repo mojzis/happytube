@@ -51,3 +51,16 @@ Orchestrator pre-checks: baseline 498 passed / 85%.
 - all seeded scenarios, guard, bad ids, CLI JSON, missing dir, CI sim: pass.
 - preexisting: header-less POST accepted (by design); reviews dir default is repo
   root while stages is cwd (same convention as channels).
+
+## 3 — fix
+- commits: da12e6e records StoreError + public helpers; f88bc9d every shown video
+  queued/reviewable; ffc1aaf rescore guard (422); 65d3fb1 is_video_id in Jinja;
+  f3c7603 CLI times; 3ae2f92 docs.
+- tests: 607 passed, coverage 87%.
+- fixed all R1–R8, Q1–Q3: `player.eligible` shared by queue + player; snapshot
+  fields optional, "incomplete assess" marker; `records.read_text`; hidden
+  `assessed_at` token; `rescored_since` single function; ChannelStoreError ⊂
+  StoreError; helpers public in `utils`; warnings once.
+- deviations: shared-helper errors are plain StoreError (tests updated); test ids
+  now 11 chars; POST without `assessed_at` (curl) not checked.
+- unresolved: bad flags/note in assess silently become empty.
