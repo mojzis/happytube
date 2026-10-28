@@ -1,276 +1,179 @@
 /**
- * HappyTube Player - Controlled YouTube video player
- * Prevents recommendations and unwanted content navigation
+ * HappyTube player — one video at a time, full width, next plays on its own.
+ * The list lives in a bottom sheet, out of the way until asked for.
  */
+
+const LAST_KEY = 'happytube:last';
+const MAX_SKIPS = 5; // stop auto-skipping after this many failed videos in a row
 
 let player;
 let videos = [];
-let currentVideoIndex = 0;
-let filteredVideos = [];
+let current = 0;
+let failedInRow = 0;
 
-// YouTube IFrame API ready callback
+const $ = (id) => document.getElementById(id);
+
+let apiReady = false;
+
+// Called by the YouTube script; the list may or may not be loaded yet.
 function onYouTubeIframeAPIReady() {
-    console.log('YouTube IFrame API ready');
-    loadVideos();
+    apiReady = true;
+    createPlayer();
 }
 
-/**
- * Load videos.json next to this page: served live by `happytube serve` under
- * /player/, a build product of the export on GitHub Pages.
- */
+/** videos.json sits next to this page: live under /player/, built on Pages. */
 async function loadVideos() {
     try {
         const response = await fetch('videos.json', { cache: 'no-store' });
         if (!response.ok) throw new Error(`videos.json: HTTP ${response.status}`);
         videos = await response.json();
-        filteredVideos = [...videos];
-
-        if (videos.length > 0) {
-            renderVideoList();
-            initPlayer(videos[0].video_id);
-        } else {
-            document.getElementById('videoList').innerHTML =
-                '<div class="loading">No videos available yet.</div>';
-        }
     } catch (error) {
         console.error('Error loading videos:', error);
-        document.getElementById('videoList').innerHTML =
-            '<div class="loading">Error loading videos. Please try again later.</div>';
-    }
-}
-
-/**
- * Initialize the YouTube player with restricted parameters
- */
-function initPlayer(videoId) {
-    player = new YT.Player('player', {
-        height: '100%',
-        width: '100%',
-        videoId: videoId,
-        playerVars: {
-            // Disable related videos from other channels
-            'rel': 0,
-            // Minimal branding
-            'modestbranding': 1,
-            // Disable annotations
-            'iv_load_policy': 3,
-            // Disable keyboard controls (prevents space/enter from opening YouTube)
-            'disablekb': 1,
-            // Enable fullscreen
-            'fs': 1,
-            // Disable video info
-            'showinfo': 0,
-            // Auto-hide controls
-            'autohide': 1,
-            // Control bar color
-            'color': 'white',
-            // Disable logo
-            'modestbranding': 1,
-            // Playback origin
-            'origin': window.location.origin
-        },
-        events: {
-            'onReady': onPlayerReady,
-            'onStateChange': onPlayerStateChange,
-            'onError': onPlayerError
-        }
-    });
-}
-
-/**
- * Player ready callback
- */
-function onPlayerReady(event) {
-    console.log('Player ready');
-    updateVideoInfo(currentVideoIndex);
-}
-
-/**
- * Player state change callback
- */
-function onPlayerStateChange(event) {
-    // If video ended and autoplay is enabled, play next
-    if (event.data === YT.PlayerState.ENDED) {
-        const autoplay = document.getElementById('autoplayNext').checked;
-        if (autoplay) {
-            playNext();
-        }
-    }
-}
-
-/**
- * Player error callback
- */
-function onPlayerError(event) {
-    console.error('Player error:', event.data);
-    alert('Error playing video. It may be unavailable or restricted.');
-}
-
-/**
- * Render the video list in the sidebar
- */
-function renderVideoList() {
-    const videoListEl = document.getElementById('videoList');
-
-    if (filteredVideos.length === 0) {
-        videoListEl.innerHTML = '<div class="loading">No videos match your search</div>';
+        showMessage('Videos could not be loaded. Please try again later.');
         return;
     }
-
-    videoListEl.innerHTML = filteredVideos.map((video, index) => `
-        <div class="video-item ${index === currentVideoIndex ? 'active' : ''}"
-             data-index="${index}"
-             onclick="playVideo(${index})">
-            <div class="video-item-title">${escapeHtml(video.title)}</div>
-            <div class="video-item-channel">${escapeHtml(video.channel_name)}</div>
-        </div>
-    `).join('');
-}
-
-/**
- * Play a specific video by index
- */
-function playVideo(index) {
-    if (index < 0 || index >= filteredVideos.length) return;
-
-    currentVideoIndex = index;
-    const video = filteredVideos[index];
-
-    if (player && player.loadVideoById) {
-        player.loadVideoById(video.video_id);
-        updateVideoInfo(index);
-        updateActiveItem();
+    if (videos.length === 0) {
+        showMessage('No videos yet.');
+        return;
     }
+    const last = localStorage.getItem(LAST_KEY);
+    current = Math.max(0, videos.findIndex((v) => v.video_id === last));
+    showMessage('');
+    renderList();
+    showInfo();
+    createPlayer();
 }
 
-/**
- * Update video information display
- */
-function updateVideoInfo(index) {
-    const video = filteredVideos[index];
-    document.getElementById('videoTitle').textContent = video.title;
-    document.getElementById('channelTitle').textContent = video.channel_name;
-    document.getElementById('videoDescription').textContent = video.description || 'No description available';
-
-    // Update previous/next button states
-    document.getElementById('prevBtn').disabled = index === 0;
-    document.getElementById('nextBtn').disabled = index === filteredVideos.length - 1;
-}
-
-/**
- * Update active item in the playlist
- */
-function updateActiveItem() {
-    const items = document.querySelectorAll('.video-item');
-    items.forEach((item, idx) => {
-        if (idx === currentVideoIndex) {
-            item.classList.add('active');
-            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        } else {
-            item.classList.remove('active');
-        }
+/** Needs both the YouTube script and the list; runs once. */
+function createPlayer() {
+    if (player || !apiReady || videos.length === 0) return;
+    player = new YT.Player('player', {
+        width: '100%',
+        height: '100%',
+        videoId: videos[current].video_id,
+        playerVars: {
+            rel: 0,             // related videos only from the same channel
+            iv_load_policy: 3,  // no annotations
+            playsinline: 1,     // iOS: play in the page, not forced fullscreen
+            fs: 1,
+            disablekb: 1,
+            origin: window.location.origin,
+        },
+        events: { onStateChange, onError },
     });
 }
 
-/**
- * Play next video
- */
-function playNext() {
-    if (currentVideoIndex < filteredVideos.length - 1) {
-        playVideo(currentVideoIndex + 1);
-    }
+function onStateChange(event) {
+    if (event.data === YT.PlayerState.PLAYING) failedInRow = 0;
+    if (event.data === YT.PlayerState.ENDED) next();
 }
 
-/**
- * Play previous video
- */
-function playPrevious() {
-    if (currentVideoIndex > 0) {
-        playVideo(currentVideoIndex - 1);
+/** An unplayable video (removed, embedding off) is skipped quietly. */
+function onError(event) {
+    console.error('Player error:', event.data, videos[current]?.video_id);
+    failedInRow += 1;
+    if (failedInRow >= MAX_SKIPS) {
+        showMessage('These videos cannot be played right now.');
+        return;
     }
+    setTimeout(next, 800);
 }
 
-/**
- * Filter videos based on search input
- */
-function filterVideos(searchTerm) {
-    const term = searchTerm.toLowerCase();
-
-    if (!term) {
-        filteredVideos = [...videos];
-    } else {
-        filteredVideos = videos.filter(video =>
-            video.title.toLowerCase().includes(term) ||
-            video.description.toLowerCase().includes(term) ||
-            video.channel_name.toLowerCase().includes(term)
-        );
-    }
-
-    // Reset to first video if current index is out of bounds
-    if (currentVideoIndex >= filteredVideos.length) {
-        currentVideoIndex = 0;
-    }
-
-    renderVideoList();
-
-    if (filteredVideos.length > 0) {
-        playVideo(currentVideoIndex);
-    }
+function play(index) {
+    current = (index + videos.length) % videos.length;
+    localStorage.setItem(LAST_KEY, videos[current].video_id);
+    player?.loadVideoById?.(videos[current].video_id);
+    showInfo();
+    markCurrent();
 }
 
-/**
- * Escape HTML to prevent XSS
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+const next = () => play(current + 1);
+const previous = () => play(current - 1);
+
+function showInfo() {
+    const video = videos[current];
+    $('title').textContent = video.title;
+    $('channel').textContent = video.channel_name;
+    document.title = `${video.title} · HappyTube`;
 }
 
-// Event listeners
+function showMessage(text) {
+    $('message').textContent = text;
+}
+
+function formatDuration(seconds) {
+    if (!seconds) return '';
+    const m = Math.floor(seconds / 60);
+    const s = String(seconds % 60).padStart(2, '0');
+    return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+/** Built with DOM nodes, never innerHTML: titles come from YouTube. */
+function renderList() {
+    const list = $('list');
+    list.replaceChildren(...videos.map((video, index) => {
+        const img = document.createElement('img');
+        img.src = `https://i.ytimg.com/vi/${encodeURIComponent(video.video_id)}/mqdefault.jpg`;
+        img.alt = '';
+        img.loading = 'lazy';
+
+        const title = document.createElement('span');
+        title.className = 'item-title';
+        title.textContent = video.title;
+
+        const meta = document.createElement('span');
+        meta.className = 'item-meta';
+        meta.textContent = [video.channel_name, formatDuration(video.duration_s)]
+            .filter(Boolean).join(' · ');
+
+        const text = document.createElement('span');
+        text.className = 'item-text';
+        text.append(title, meta);
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'item';
+        button.append(img, text);
+        button.addEventListener('click', () => {
+            play(index);
+            $('sheet').close();
+        });
+
+        const li = document.createElement('li');
+        li.append(button);
+        return li;
+    }));
+    markCurrent();
+}
+
+function markCurrent() {
+    $('list').querySelectorAll('.item').forEach((item, index) => {
+        item.classList.toggle('current', index === current);
+    });
+}
+
+function openList() {
+    if (videos.length === 0) return;
+    $('sheet').showModal();
+    $('list').querySelectorAll('.item')[current]?.scrollIntoView({ block: 'center' });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Search box
-    const searchBox = document.getElementById('searchBox');
-    let searchTimeout;
-    searchBox.addEventListener('input', (e) => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            filterVideos(e.target.value);
-        }, 300);
+    loadVideos();
+    const sheet = $('sheet');
+    $('listBtn').addEventListener('click', openList);
+    $('cornerBtn').addEventListener('click', openList);
+    $('closeBtn').addEventListener('click', () => sheet.close());
+    $('nextBtn').addEventListener('click', () => videos.length && next());
+    // Tap on the dimmed backdrop closes the sheet.
+    sheet.addEventListener('click', (event) => {
+        if (event.target === sheet) sheet.close();
     });
 
-    // Control buttons
-    document.getElementById('nextBtn').addEventListener('click', playNext);
-    document.getElementById('prevBtn').addEventListener('click', playPrevious);
-
-    // Keyboard shortcuts (global)
-    document.addEventListener('keydown', (e) => {
-        // Don't interfere if user is typing in search box
-        if (e.target.id === 'searchBox') return;
-
-        switch(e.key) {
-            case 'ArrowRight':
-            case 'n':
-                e.preventDefault();
-                playNext();
-                break;
-            case 'ArrowLeft':
-            case 'p':
-                e.preventDefault();
-                playPrevious();
-                break;
-        }
+    document.addEventListener('keydown', (event) => {
+        if (sheet.open || videos.length === 0) return;
+        if (event.key === 'ArrowRight' || event.key === 'n') next();
+        if (event.key === 'ArrowLeft' || event.key === 'p') previous();
+        if (event.key === 'l') openList();
     });
-});
-
-// Prevent YouTube from capturing keyboard events
-window.addEventListener('keydown', (e) => {
-    // Allow only certain keys when player is focused
-    if (e.target.tagName === 'IFRAME') {
-        // Allow space, k (play/pause), m (mute), f (fullscreen)
-        const allowedKeys = [' ', 'k', 'm', 'f'];
-        if (!allowedKeys.includes(e.key)) {
-            e.preventDefault();
-        }
-    }
 });

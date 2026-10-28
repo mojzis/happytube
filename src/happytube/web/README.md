@@ -19,12 +19,17 @@ so it is one code path in both places.
 
 ## Features
 
-- **Controlled playback:** YouTube embed with recommendations and related
-  videos disabled
-- **Curated playlist:** only the selected videos
-- **Search:** filter by title, description or channel
-- **Keyboard navigation:** arrow keys or n/p
-- **Auto-play next** (optional) and fullscreen
+Phone-first, the video is the page:
+
+- **Video fills the screen:** largest 16:9 box; in landscape on a phone, nothing
+  else but one faint list button in the corner.
+- **Portrait:** a quiet strip under the video — title, channel, next, list.
+- **Plays on:** the next video starts when one ends, wrapping to the first; an
+  unplayable video is skipped (gives up after 5 in a row).
+- **Resumes:** the last video is remembered (`localStorage`).
+- **List on demand:** a bottom sheet with thumbnails, closed by default.
+- **Keyboard (desktop):** arrows or n/p, l opens the list.
+- **No search, no description** on purpose.
 
 ## YouTube embed restrictions
 
