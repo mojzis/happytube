@@ -1,4 +1,5 @@
-from datetime import datetime
+import time
+from datetime import UTC, date, datetime
 
 import pytest
 from anthropic.types import TextBlock, ToolUseBlock
@@ -48,8 +49,30 @@ def test_utc_now_iso_format():
     assert parsed.tzinfo is None
 
 
-def test_today_local_is_local_date():
-    assert today_local() == datetime.now().astimezone().date()
+_UTC_LATE_EVENING = datetime(2026, 1, 1, 23, 30, tzinfo=UTC)
+
+
+class _FrozenDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return _UTC_LATE_EVENING if tz is None else _UTC_LATE_EVENING.astimezone(tz)
+
+
+@pytest.fixture
+def kiritimati_tz(monkeypatch):
+    """Run in UTC+14 so the local date is a day ahead of UTC late in the day."""
+    monkeypatch.setenv("TZ", "Pacific/Kiritimati")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+@pytest.mark.usefixtures("kiritimati_tz")
+def test_today_local_uses_local_not_utc_date(monkeypatch):
+    monkeypatch.setattr("happytube.utils.datetime", _FrozenDatetime)
+    assert today_local() == date(2026, 1, 2)
+    assert _UTC_LATE_EVENING.date() == date(2026, 1, 1)
 
 
 _TOOL = ToolUseBlock(id="t1", input={}, name="tool", type="tool_use")
