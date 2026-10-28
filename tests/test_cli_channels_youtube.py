@@ -7,12 +7,17 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+from happytube.channels.models import Evidence, EvidenceVideo
+from happytube.channels.store import ChannelStore
 from happytube.cli import channels as channels_cli
 from happytube.cli.commands import cli
 from happytube.youtube import YouTubeClient
 
 FAKE_KEY = "fake-key-for-tests"
 QUOTA_BODY = {"error": {"message": "quota", "errors": [{"reason": "quotaExceeded"}]}}
+NOT_FOUND_BODY = {
+    "error": {"message": "gone", "errors": [{"reason": "playlistNotFound"}]}
+}
 
 
 def _response(payload, status_code=200, reason="OK"):
@@ -30,6 +35,9 @@ class FakeYouTube:
             "UUzoo": [("v1", "PT45S"), ("v2", "PT12M")],
             "UUbbc": [("b1", "PT1H")],
         }
+        # Shorts playlists; a channel without one gets 404 playlistNotFound.
+        self.shorts = {"UUSHzoo": ["v1"]}
+        self.broken: set[str] = set()  # playlists answering 500
         self.quota = quota
         self.stop_body = QUOTA_BODY  # error once the quota is used up
         self.calls: list[str] = []
@@ -40,8 +48,12 @@ class FakeYouTube:
         self.calls.append(endpoint)
         if len(self.calls) > self.quota:
             return _response(self.stop_body, 403, "Forbidden")
-        if endpoint == "playlistItems" and params["playlistId"] not in self.uploads:
-            return _response({"error": {"message": "gone"}}, 404, "Not Found")
+        if endpoint == "playlistItems":
+            playlist = params["playlistId"]
+            if playlist in self.broken:
+                return _response({"error": {"message": "boom"}}, 500, "Server Error")
+            if playlist not in self.uploads and playlist not in self.shorts:
+                return _response(NOT_FOUND_BODY, 404, "Not Found")
         return _response(getattr(self, f"_{endpoint}")(params))
 
     def _channels(self, params):
@@ -61,8 +73,12 @@ class FakeYouTube:
         }
 
     def _playlistItems(self, params):
-        videos = self.uploads[params["playlistId"]]
-        return {"items": [{"contentDetails": {"videoId": v}} for v, _ in videos]}
+        playlist = params["playlistId"]
+        if playlist in self.shorts:
+            ids = self.shorts[playlist]
+        else:
+            ids = [v for v, _ in self.uploads[playlist]]
+        return {"items": [{"contentDetails": {"videoId": v}} for v in ids]}
 
     def _videos(self, params):
         durations = dict(v for vs in self.uploads.values() for v in vs)
@@ -134,13 +150,30 @@ def test_resolve_all_reports_statuses_and_writes_ids(registry, youtube, root):
     assert saved["channel_id"] == "UCzoo"
 
 
-def test_resolve_twice_is_already_and_mismatch_fails(registry, youtube):
+def test_resolve_skips_resolved_channels_at_no_cost(registry, youtube):
     registry("resolve", "zoo-zlin")
+    youtube.calls.clear()
+    result = registry("resolve", "zoo-zlin", "wrong", "--json")
+    assert _statuses(result) == {"zoo-zlin": "already", "wrong": "not_found"}
+    assert json.loads(result.stdout)["quota_units"] == 1
+    assert youtube.calls == ["channels"]
+
+
+def test_resolve_verify_same_id_is_already(registry, youtube):
+    registry("resolve", "zoo-zlin")
+    assert _statuses(registry("resolve", "zoo-zlin", "--verify", "--json")) == {
+        "zoo-zlin": "already"
+    }
+    assert youtube.calls == ["channels", "channels"]
+
+
+def test_resolve_mismatch_only_seen_with_verify(registry, youtube):
+    registry("resolve", "zoo-zlin")
+    youtube.handles["@zoozlin"] = "UCimpostor"
     assert _statuses(registry("resolve", "zoo-zlin", "--json")) == {
         "zoo-zlin": "already"
     }
-    youtube.handles["@zoozlin"] = "UCimpostor"
-    result = registry("resolve", "zoo-zlin", "--json")
+    result = registry("resolve", "zoo-zlin", "--verify", "--json")
     assert result.exit_code == 1
     assert _statuses(result) == {"zoo-zlin": "mismatch"}
     assert "Some channels failed" in result.stderr
@@ -177,8 +210,8 @@ def test_evidence_all_writes_snapshots(registry, youtube, root):
         2,
         1,
     )
-    # 2 resolves + 1 for the unknown handle + 1 channels + 2 x (playlist + videos)
-    assert data["quota_units"] == 8
+    # 3 resolves + 1 channels + 2 x (uploads + shorts playlist + videos)
+    assert data["quota_units"] == 10
     assert by_slug["wrong"]["status"] == "not_found"
     assert list((root / "zoo-zlin" / "evidence").glob("*.yaml"))
 
@@ -205,33 +238,82 @@ def test_evidence_human_output(registry, youtube):
     assert result.exit_code == 0
     assert "zoo-zlin: written" in result.stdout
     assert "(2 videos, 1 shorts)" in result.stdout
-    assert "quota units used: 5" in result.stdout
+    assert "quota units used: 6" in result.stdout
 
 
 def test_evidence_quota_exceeded_keeps_written_snapshots(registry, youtube, root):
-    youtube.quota = 5  # 2 resolves, channels, zoo's playlist + videos; bbc fails
-    result = registry("evidence", "zoo-zlin", "bbc-earth", "--json")
+    youtube.quota = 7  # 3 resolves, channels, zoo's 3 calls; bbc's first fails
+    result = registry("evidence", "zoo-zlin", "bbc-earth", "wrong", "--json")
     assert result.exit_code == 1
     assert "quota" in result.stderr
-    assert _statuses(result) == {"zoo-zlin": "written", "bbc-earth": "error"}
+    assert _statuses(result) == {
+        "zoo-zlin": "written",
+        "bbc-earth": "error",
+        "wrong": "not_found",
+    }
     assert list((root / "zoo-zlin" / "evidence").glob("*.yaml"))
 
 
-def test_evidence_quota_exceeded_while_resolving(registry, youtube):
-    youtube.quota = 0
-    result = registry("evidence", "zoo-zlin", "--json")
+def test_evidence_quota_at_channels_call_lists_every_channel(registry, youtube):
+    youtube.quota = 2  # both resolves pass, the batched channels call fails
+    result = registry("evidence", "zoo-zlin", "bbc-earth", "--json")
+    assert result.exit_code == 1
+    assert _statuses(result) == {"zoo-zlin": "not_fetched", "bbc-earth": "not_fetched"}
+
+
+@pytest.mark.parametrize("command", ["resolve", "evidence"])
+def test_quota_while_resolving_lists_every_channel(registry, youtube, command):
+    youtube.quota = 1  # zoo resolves, bbc's resolve fails, wrong is never reached
+    result = registry(command, "zoo-zlin", "bbc-earth", "wrong", "--json")
     assert result.exit_code == 1
     assert json.loads(result.stdout)["aborted"]
-    assert _statuses(result) == {"zoo-zlin": "error"}
+    first = "resolved" if command == "resolve" else "not_fetched"
+    assert _statuses(result) == {
+        "zoo-zlin": first,
+        "bbc-earth": "error",
+        "wrong": "not_fetched",
+    }
+
+
+def test_evidence_missing_uploads_playlist_is_zero_videos(registry, youtube):
+    youtube.uploads.pop("UUbbc")
+    result = registry("evidence", "bbc-earth", "--json")
+    assert result.exit_code == 0, result.stderr
+    (bbc,) = json.loads(result.stdout)["results"]
+    assert (bbc["status"], bbc["video_count"]) == ("written", 0)
 
 
 def test_evidence_playlist_error_is_reported(registry, youtube):
-    youtube.uploads.pop("UUbbc")
+    youtube.broken.add("UUbbc")
     result = registry("evidence", "bbc-earth", "zoo-zlin", "--json")
     assert result.exit_code == 1
     results = {r["slug"]: r for r in json.loads(result.stdout)["results"]}
-    assert results["bbc-earth"]["message"].endswith("404 Not Found - gone")
+    assert results["bbc-earth"]["message"].endswith("500 Server Error - boom")
     assert results["zoo-zlin"]["status"] == "written"
+
+
+def test_evidence_no_uush_playlist_means_no_shorts(registry, youtube):
+    youtube.uploads["UUbbc"] = [("b1", "PT30S")]  # short by duration, not a Short
+    result = registry("evidence", "bbc-earth", "--json")
+    (bbc,) = json.loads(result.stdout)["results"]
+    assert (bbc["status"], bbc["shorts_count"]) == ("written", 0)
+
+
+def test_evidence_shorts_from_uush(registry, youtube):
+    youtube.uploads["UUzoo"] = [("v1", "PT10M"), ("v2", "PT45S")]  # v1 is a Short
+    registry("evidence", "zoo-zlin")
+    data = json.loads(registry("show", "zoo-zlin", "--json").stdout)["evidence"]
+    assert data["shorts_source"] == "uush"
+    assert [v["video_id"] for v in data["videos"] if v["is_short"]] == ["v1"]
+
+
+def test_evidence_uush_error_falls_back_to_duration(registry, youtube):
+    youtube.broken.add("UUSHzoo")
+    result = registry("evidence", "zoo-zlin", "--json")
+    assert result.exit_code == 0, result.stderr
+    data = json.loads(registry("show", "zoo-zlin", "--json").stdout)["evidence"]
+    assert data["shorts_source"] == "duration"
+    assert [v["video_id"] for v in data["videos"] if v["is_short"]] == ["v1"]
 
 
 def test_list_and_show_work_without_keys(registry):
@@ -251,3 +333,25 @@ def test_invalid_key_stops_after_first_call(registry, youtube):
     assert result.exit_code == 1
     assert "API key not valid" in result.stderr
     assert youtube.calls == ["channels"]
+
+
+def test_show_zero_subscribers_and_unknown_duration(registry, root):
+    snapshot = Evidence(
+        method="api",
+        channel_id="UCzoo",
+        title="Zoo",
+        subscriber_count=0,
+        videos=[
+            EvidenceVideo(
+                video_id="v",
+                title="clip",
+                published_at="2026-10-01T00:00:00Z",
+                is_short=False,
+            )
+        ],
+    )
+    ChannelStore(root).add_evidence("zoo-zlin", snapshot)
+    shown = registry("show", "zoo-zlin").stdout
+    assert "subscribers: 0," in shown
+    assert "2026-10-01  ?  clip" in shown
+    assert "Nones" not in shown

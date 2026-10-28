@@ -225,6 +225,11 @@ def show_channel(store: ChannelStore, slug: str, as_json: bool) -> None:
     _print_evidence(evidence)
 
 
+def _or(value: Any, missing: str) -> Any:
+    """``value``, or ``missing`` when it is ``None`` (``0`` stays ``0``)."""
+    return missing if value is None else value
+
+
 def _print_evidence(evidence: dict[str, Any] | None, recent: int = 5) -> None:
     if evidence is None:
         console.print("\n[bold]evidence[/bold]: none yet (run channels evidence)")
@@ -234,12 +239,14 @@ def _print_evidence(evidence: dict[str, Any] | None, recent: int = 5) -> None:
         f"fetched_at: {evidence['fetched_at']}",
         f"resolved to: {evidence['title']} ({evidence['custom_url'] or '-'}, "
         f"{evidence['channel_id']})",
-        f"subscribers: {evidence['subscriber_count'] or 'hidden'}, "
+        f"subscribers: {_or(evidence['subscriber_count'], 'hidden')}, "
         f"videos on channel: {evidence['video_count']}",
-        f"recent uploads stored: {len(videos)}, shorts: {evidence['shorts_count']}",
+        f"recent uploads stored: {len(videos)}, shorts: {evidence['shorts_count']} "
+        f"(by {evidence['shorts_source']})",
     ]
     lines += [
-        f"  {v['published_at'][:10]}  {v['duration_s']}s"
+        f"  {v['published_at'][:10]}  "
+        + ("?" if v["duration_s"] is None else f"{v['duration_s']}s")
         + (" short" if v["is_short"] else "")
         + f"  {v['title']}"
         for v in videos[:recent]
@@ -293,7 +300,7 @@ def make_youtube_client() -> YouTubeClient:
     except ValidationError as e:
         msg = "YTKEY is not set (environment or .env); it is needed to call YouTube"
         raise click.ClickException(msg) from e
-    return YouTubeClient(settings.youtube_api_key)
+    return YouTubeClient(settings.youtube_api_key.get_secret_value())
 
 
 def _select_slugs(store: ChannelStore, slugs: tuple[str, ...], all_: bool) -> list[str]:
@@ -342,19 +349,31 @@ all_option = click.option(
 @channels.command("resolve")
 @slug_args
 @all_option
+@click.option(
+    "--verify",
+    is_flag=True,
+    help="Also re-check channels that already have a channel_id (1 unit each).",
+)
 @json_option
 @click.pass_obj
 @_store_errors_as_click
 def resolve_command(
-    store: ChannelStore, slugs: tuple[str, ...], all_: bool, as_json: bool
+    store: ChannelStore,
+    slugs: tuple[str, ...],
+    all_: bool,
+    verify: bool,
+    as_json: bool,
 ) -> None:
     """Resolve handles to channel ids via YouTube (1 quota unit per handle).
 
-    Fills a missing channel_id in channel.yaml; a set one is verified and never
-    overwritten. not_found / no_handle are reported, not failures.
+    Fills a missing channel_id in channel.yaml. Channels that already have one are
+    'already' at no cost; with --verify their handle is re-checked and a different
+    id is a mismatch, never overwritten. not_found / no_handle are reported, not
+    failures.
     """
     selected = _select_slugs(store, slugs, all_)
-    _report(resolve_channels(store, make_youtube_client(), selected), as_json)
+    client = make_youtube_client()
+    _report(resolve_channels(store, client, selected, verify=verify), as_json)
 
 
 @channels.command("evidence")

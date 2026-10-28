@@ -3,14 +3,17 @@ from typing import Any
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from happytube.channels.evidence import (
     build_evidence,
     is_short,
+    shorts_playlist_id,
     upload_video_ids,
 )
 from happytube.channels.models import Channel, Evidence
 from happytube.channels.store import (
+    ChannelExistsError,
     ChannelIdMismatchError,
     ChannelNotFoundError,
     ChannelStore,
@@ -61,12 +64,30 @@ VIDEO_ITEMS = [
 ]
 
 
+NEW = datetime(2024, 10, 15, tzinfo=UTC)  # Shorts up to 3 min from here on
+OLD = NEW - timedelta(seconds=1)
+
+
 @pytest.mark.parametrize(
-    ("duration_s", "expected"),
-    [(58, True), (180, True), (181, False), (0, False), (None, False)],
+    ("duration_s", "published_at", "expected"),
+    [
+        (58, NEW, True),
+        (180, NEW, True),
+        (181, NEW, False),
+        (60, OLD, True),
+        (61, OLD, False),
+        (129, OLD, False),
+        (180, None, True),
+        (0, NEW, False),
+        (None, NEW, False),
+    ],
 )
-def test_is_short_boundaries(duration_s, expected):
-    assert is_short(duration_s) is expected
+def test_is_short_duration_fallback(duration_s, published_at, expected):
+    assert is_short(duration_s, published_at) is expected
+
+
+def test_shorts_playlist_id():
+    assert shorts_playlist_id("UCabc-123") == "UUSHabc-123"
 
 
 def test_upload_video_ids_keeps_order():
@@ -93,6 +114,7 @@ def test_build_evidence_channel_fields():
         "view_count": 1200000,
         "video_count": 412,
         "uploads_playlist_id": "UUzoo",
+        "shorts_source": "duration",
     }
     assert len(evidence.description) == 1000
 
@@ -106,6 +128,30 @@ def test_build_evidence_videos_newest_first_with_shorts():
         ("three-min", 180, True),
         ("old", 720, False),
     ]
+
+
+def test_build_evidence_shorts_from_uush_ids():
+    evidence = build_evidence(CHANNEL_ITEM, VIDEO_ITEMS, short_ids={"three-min"})
+    assert evidence.shorts_source == "uush"
+    assert [v.video_id for v in evidence.videos if v.is_short] == ["three-min"]
+
+
+def test_build_evidence_empty_uush_means_no_shorts():
+    evidence = build_evidence(CHANNEL_ITEM, VIDEO_ITEMS, short_ids=set())
+    assert (evidence.shorts_source, evidence.shorts_count) == ("uush", 0)
+
+
+def test_build_evidence_skips_video_without_publish_date():
+    broken = _video("broken", "PT1M", "2026-01-01T00:00:00Z")
+    del broken["snippet"]["publishedAt"]
+    evidence = build_evidence(CHANNEL_ITEM, [*VIDEO_ITEMS, broken, {"snippet": {}}])
+    assert len(evidence.videos) == len(VIDEO_ITEMS)
+
+
+def test_old_snapshot_without_shorts_source_loads():
+    data = _evidence().model_dump(mode="json")
+    del data["shorts_source"]
+    assert Evidence.model_validate(data).shorts_source == "duration"
 
 
 def test_build_evidence_video_details():
@@ -206,6 +252,70 @@ def test_set_channel_id_fills_null_once(store, tmp_path):
     assert written == [True, False]
     assert before.replace("channel_id: null", "channel_id: UCzoo") == after
     assert not list((tmp_path / "zoo-zlin").glob(".*tmp"))
+
+
+def test_set_channel_id_keeps_hand_edited_file(store, tmp_path):
+    path = tmp_path / "zoo-zlin" / "channel.yaml"
+    path.write_text(
+        "name: Zoo Zlín\nslug: zoo-zlin\nkind: zoo\nlanguages: [cs]\n"
+        "handle: '@zoozlin'\nadded_by: me\nadded_at: '2026-01-01T00:00:00Z'\n",
+        encoding="utf-8",
+    )
+    assert store.set_channel_id("zoo-zlin", "UCzoo")
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert list(data) == [
+        "name",
+        "slug",
+        "kind",
+        "languages",
+        "handle",
+        "added_by",
+        "added_at",
+        "channel_id",
+    ]
+    assert data["added_at"] == "2026-01-01T00:00:00Z"
+    assert "Zoo Zlín" in path.read_text(encoding="utf-8")
+
+
+def test_set_channel_id_does_not_invent_added_at(store, tmp_path):
+    path = tmp_path / "zoo-zlin" / "channel.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    del data["added_at"]
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    store.set_channel_id("zoo-zlin", "UCzoo")
+    assert "added_at" not in yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_set_channel_id_refuses_id_of_another_channel(store, tmp_path):
+    store.add(
+        Channel(
+            slug="other",
+            name="Other",
+            kind="zoo",
+            languages=["cs"],
+            channel_id="UCzoo",
+            added_by="me",
+        )
+    )
+    with pytest.raises(ChannelExistsError, match="already slug 'other'"):
+        store.set_channel_id("zoo-zlin", "UCzoo")
+    assert store.get_channel("zoo-zlin").channel_id is None
+
+
+def test_set_channel_id_refuses_invalid_result(store):
+    with pytest.raises(ValidationError):
+        store.set_channel_id("zoo-zlin", "not-a-channel-id")
+    assert store.get_channel("zoo-zlin").channel_id is None
+
+
+def test_latest_evidence_reads_only_newest_file(store, tmp_path):
+    store.add_evidence("zoo-zlin", _evidence(T0, "first"))
+    store.add_evidence("zoo-zlin", _evidence(T0, "second"))
+    store.add_evidence("zoo-zlin", _evidence(T0 - timedelta(days=1), "older"))
+    (tmp_path / "zoo-zlin" / "evidence" / "20200101T000000Z.yaml").write_text(
+        "not: [valid", encoding="utf-8"
+    )
+    assert store.latest_evidence("zoo-zlin").title == "second"
 
 
 def test_set_channel_id_refuses_to_overwrite(store):

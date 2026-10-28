@@ -108,6 +108,7 @@ def slugify(text: str) -> str:
 
 
 EvidenceMethod = Literal["api", "rss"]
+ShortsSource = Literal["uush", "duration"]
 
 
 class EvidenceVideo(BaseModel):
@@ -151,6 +152,9 @@ class Evidence(BaseModel):
     view_count: int | None = Field(default=None, ge=0)
     video_count: int | None = Field(default=None, ge=0)
     uploads_playlist_id: str | None = None
+    # How ``is_short`` was decided: membership of the channel's ``UUSH…`` Shorts
+    # playlist, or the duration fallback (the default, so older snapshots load).
+    shorts_source: ShortsSource = "duration"
     videos: list[EvidenceVideo] = Field(default_factory=list)
 
     @property

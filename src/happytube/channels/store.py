@@ -11,12 +11,14 @@ exclusively, so concurrent writers never overwrite each other — except
 ``set_channel_id``, which fills a null ``channel_id`` in ``channel.yaml`` once.
 """
 
+import os
 import re
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -178,6 +180,26 @@ def _load_records[M: BaseModel](
     return [record for record, _ in loaded]
 
 
+def _latest_by_name(directory: Path) -> Path | None:
+    """The newest record file by name alone: its timestamp stem, then the same
+    collision-suffix rule as ``_load_records``. Valid for files named by
+    ``_stamp`` of the record's own timestamp (evidence snapshots), so only one
+    file needs parsing."""
+    if not directory.is_dir():
+        return None
+    paths = list(directory.glob("*.yaml"))
+    names = {p.name for p in paths}
+
+    def key(path: Path) -> tuple[str, int, str]:
+        index = _collision_index(path.name, names)
+        stem = path.stem
+        if index > 1:
+            stem = stem.rsplit("-", 1)[0]
+        return (stem, index, path.name)
+
+    return max(paths, key=key, default=None)
+
+
 def _write_new(directory: Path, stem: str, content: str) -> Path:
     """Create ``<stem>.yaml`` exclusively, or ``<stem>-2.yaml``, ``-3`` … if taken."""
     directory.mkdir(exist_ok=True)
@@ -270,8 +292,10 @@ class ChannelStore:
         )
 
     def latest_evidence(self, slug: str) -> Evidence | None:
-        snapshots = self.evidence(slug)
-        return snapshots[-1] if snapshots else None
+        """The newest snapshot, parsing only its file (picked by name: the stem
+        is the snapshot's ``fetched_at``)."""
+        path = _latest_by_name(self._channel_dir(slug) / EVIDENCE_DIR)
+        return None if path is None else _load_model(path, Evidence)
 
     def get(self, slug: str) -> ChannelEntry:
         return ChannelEntry(
@@ -339,21 +363,46 @@ class ChannelStore:
     def set_channel_id(self, slug: str, channel_id: str) -> bool:
         """Fill a null ``channel_id`` in ``channel.yaml`` (the one machine write to
         it, decision 0004). Returns ``True`` if written, ``False`` if it already
-        held ``channel_id``; a different id raises ``ChannelIdMismatchError``."""
+        held ``channel_id``; a different id raises ``ChannelIdMismatchError``, an
+        id another channel holds raises ``ChannelExistsError``.
+
+        Only ``channel_id`` changes: the rest of the mapping is kept as loaded, in
+        its key order (YAML comments are not preserved). The write is atomic.
+        """
         channel = self.get_channel(slug)
         if channel.channel_id == channel_id:
             return False
         if channel.channel_id is not None:
-            msg = (
-                f"{slug}: channel.yaml has channel_id '{channel.channel_id}' but "
-                f"the handle resolves to '{channel_id}'; not overwriting"
-            )
-            raise ChannelIdMismatchError(msg)
-        updated = Channel.model_validate(
-            {**channel.model_dump(mode="json"), "channel_id": channel_id}
-        )
+            self._mismatch(slug, channel.channel_id, channel_id)
+        for other in self.slugs():
+            if other != slug and self.get_channel(other).channel_id == channel_id:
+                msg = f"{slug}: channel id '{channel_id}' is already slug '{other}'"
+                raise ChannelExistsError(msg)
         path = self._channel_dir(slug) / CHANNEL_FILE
-        tmp = path.with_name(f".{CHANNEL_FILE}.tmp")
-        tmp.write_text(_dump_yaml(updated.model_dump(mode="json")), encoding="utf-8")
-        tmp.replace(path)
+        raw = _load_yaml(path)
+        raw["channel_id"] = channel_id
+        Channel.model_validate(raw)  # refuse to write a file that won't load
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{CHANNEL_FILE}.", suffix=".tmp", dir=path.parent
+        )
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(_dump_yaml(raw))
+            current = _load_yaml(path).get("channel_id")
+            if current is not None:  # another writer got there first
+                if current == channel_id:
+                    return False
+                self._mismatch(slug, current, channel_id)
+            tmp.replace(path)
+        finally:
+            tmp.unlink(missing_ok=True)
         return True
+
+    @staticmethod
+    def _mismatch(slug: str, current: str, resolved: str) -> NoReturn:
+        msg = (
+            f"{slug}: channel.yaml has channel_id '{current}' but the handle "
+            f"resolves to '{resolved}'; not overwriting"
+        )
+        raise ChannelIdMismatchError(msg)
