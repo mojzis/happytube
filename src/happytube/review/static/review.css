@@ -46,6 +46,15 @@ th, td { text-align: left; vertical-align: top; padding: 0.5rem; border-bottom: 
 th { font-size: 0.9rem; color: var(--muted); }
 tr.attention { background: var(--attention); }
 .queue-section { margin-bottom: 2rem; }
+/* Both queue tables share these widths, so their columns line up. */
+table.queue { table-layout: fixed; }
+table.queue th:nth-child(1) { width: 28%; }
+table.queue th:nth-child(2) { width: 12%; }
+table.queue th:nth-child(3) { width: 8%; }
+table.queue th:nth-child(4) { width: 11%; }
+table.queue th:nth-child(5) { width: 19%; }
+table.queue th:nth-child(6) { width: 9%; }
+table.queue td { overflow-wrap: anywhere; }
 table.videos img { display: block; border-radius: 3px; }
 tr.unsuitable td { color: var(--muted); }
 
@@ -84,3 +93,4 @@ ol.reviews { list-style: none; padding: 0; margin: 0 0 1.5rem; }
 .review-form label.choice { flex-direction: row; gap: 0.4rem; align-items: center; display: inline-flex; margin-right: 1.25rem; }
 fieldset { border: 1px solid var(--line); border-radius: 4px; }
 .error-message { color: var(--no); font-weight: 600; }
+.filters .htmx-error { flex-basis: 100%; margin: 0; }
