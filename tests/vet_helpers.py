@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from happytube.channels.models import Channel, Evidence, EvidenceVideo, VetUsage
 from happytube.channels.store import ChannelStore
 from happytube.channels.vet import Prompt, VetOutput, long_form
-from happytube.channels.vet_run import VetCallError, VetReply
+from happytube.channels.vet_run import VetError, VetReply
 from happytube.rubric import VideoScore
 
 FETCHED_AT = datetime(2026, 10, 28, 19, 16, 18, tzinfo=UTC)
@@ -102,7 +102,7 @@ class FakeVetClient:
 
     def __init__(self, evidence, *, errors=None, reply=None, **output_kwargs):
         self.evidence = evidence
-        self.errors: dict[int, VetCallError] = errors or {}
+        self.errors: dict[int, VetError] = errors or {}
         self.reply = reply
         self.output_kwargs = output_kwargs
         self.prompts: list[Prompt] = []

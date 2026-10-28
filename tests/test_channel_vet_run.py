@@ -1,5 +1,6 @@
 """``vet_channels`` and ``AnthropicVetClient`` with fakes (no network)."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -7,12 +8,14 @@ import anthropic
 import httpx2
 import pytest
 
-from happytube.channels.models import VetUsage
+from happytube.channels.models import Review, VetUsage
 from happytube.channels.store import ChannelStore
-from happytube.channels.vet import VetOutput, build_prompt
+from happytube.channels.vet import build_prompt
 from happytube.channels.vet_run import (
+    OUTPUT_FORMAT,
     AnthropicVetClient,
     VetCallError,
+    VetError,
     VetReply,
     VetStoppingError,
     vet_channels,
@@ -68,6 +71,41 @@ def test_vet_run_totals_tokens_and_cost(vetted):
     run, _ = vetted
     assert (run.input_tokens, run.output_tokens, run.usd) == (1000, 500, 0.014)
     assert not run.failed
+
+
+def test_vet_records_the_answering_and_the_requested_model(store):
+    evidence = make_evidence()
+    seed(store, evidence=evidence)
+    output = make_output(evidence)
+    reply = VetReply(output, "claude-opus-5", USAGE, "end_turn")  # fallback ran
+    run = vet_channels(store, FakeVetClient(evidence, reply=reply), ["zoo-praha"])
+    assert run.results[0].model == "claude-opus-5"
+    assert store.vets("zoo-praha")[0].model == "claude-opus-5"
+    assert run.as_dict()["requested_model"] == "claude-opus-5-5"
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_human_rejected_channel_is_skipped_without_a_call(store, dry_run):
+    evidence = make_evidence()
+    seed(store, evidence=evidence)
+    store.add_review(
+        "zoo-praha", Review(reviewer="matous", role="human", verdict="reject")
+    )
+    client = FakeVetClient(evidence)
+    run = vet_channels(store, None if dry_run else client, ["zoo-praha"])
+    assert run.results[0].status == "skipped_rejected"
+    assert (client.prompts, _files(store, "zoo-praha", "vet")) == ([], [])
+    assert not run.failed
+
+
+def test_agent_reject_does_not_skip(store):
+    evidence = make_evidence()
+    seed(store, evidence=evidence)
+    store.add_review(
+        "zoo-praha", Review(reviewer="claude-vet", role="agent", verdict="reject")
+    )
+    run = vet_channels(store, FakeVetClient(evidence), ["zoo-praha"])
+    assert run.results[0].status == "vetted"
 
 
 def test_current_vet_is_skipped_unless_forced(store):
@@ -169,12 +207,14 @@ def test_stopping_error_stops_the_run_keeping_written_files(store):
 # --- AnthropicVetClient -----------------------------------------------------
 
 
-def _sdk_response(stop_reason="end_turn", output=None, category=None):
+def _sdk_response(stop_reason="end_turn", text=None, category=None, content=None):
+    if content is None:
+        content = [] if text is None else [SimpleNamespace(type="text", text=text)]
     return SimpleNamespace(
         stop_reason=stop_reason,
         stop_details=SimpleNamespace(category=category) if category else None,
         model="claude-opus-5-5",
-        parsed_output=output,
+        content=content,
         usage=SimpleNamespace(
             input_tokens=900,
             cache_creation_input_tokens=100,
@@ -187,9 +227,9 @@ def _sdk_response(stop_reason="end_turn", output=None, category=None):
 def _sdk_client(result):
     sdk = MagicMock()
     if isinstance(result, Exception):
-        sdk.beta.messages.parse.side_effect = result
+        sdk.beta.messages.create.side_effect = result
     else:
-        sdk.beta.messages.parse.return_value = result
+        sdk.beta.messages.create.return_value = result
     return sdk
 
 
@@ -199,9 +239,9 @@ def _prompt():
 
 def test_client_sends_model_effort_schema_and_fallback():
     output = make_output(make_evidence())
-    sdk = _sdk_client(_sdk_response(output=output))
+    sdk = _sdk_client(_sdk_response(text=output.model_dump_json()))
     reply = AnthropicVetClient("unused", client=sdk).vet(_prompt())
-    kwargs = sdk.beta.messages.parse.call_args.kwargs
+    kwargs = sdk.beta.messages.create.call_args.kwargs
     assert {
         k: kwargs[k] for k in sorted(kwargs) if k not in {"system", "messages"}
     } == {
@@ -209,23 +249,77 @@ def test_client_sends_model_effort_schema_and_fallback():
         "fallbacks": "default",
         "max_tokens": 16000,
         "model": "claude-opus-5-5",
-        "output_config": {"effort": "medium"},
-        "output_format": VetOutput,
+        "output_config": {"effort": "medium", "format": OUTPUT_FORMAT},
     }
-    assert (reply.output, reply.usage) == (
+    assert OUTPUT_FORMAT["type"] == "json_schema"
+    assert OUTPUT_FORMAT["schema"]["additionalProperties"] is False
+    assert (reply.output, reply.usage, reply.error) == (
         output,
         VetUsage(input_tokens=1000, output_tokens=400),
+        None,
     )
 
 
+def test_client_reads_the_answer_after_a_fallback_block():
+    output = make_output(make_evidence())
+    content = [
+        SimpleNamespace(type="text", text="{partial"),
+        SimpleNamespace(type="fallback"),
+        SimpleNamespace(type="thinking", thinking=""),
+        SimpleNamespace(type="text", text=output.model_dump_json()),
+    ]
+    sdk = _sdk_client(_sdk_response(content=content))
+    assert AnthropicVetClient("unused", client=sdk).vet(_prompt()).output == output
+
+
 def test_client_reports_refusal_without_output():
-    sdk = _sdk_client(_sdk_response("refusal", output=None, category="cyber"))
+    sdk = _sdk_client(_sdk_response("refusal", category="cyber"))
     reply = AnthropicVetClient("unused", client=sdk).vet(_prompt())
     assert (reply.output, reply.stop_reason, reply.refusal_category) == (
         None,
         "refusal",
         "cyber",
     )
+
+
+def _out_of_range_text():
+    data = make_output(make_evidence()).model_dump(mode="json")
+    data["videos"][0]["calm"] = 7
+    return json.dumps(data)
+
+
+@pytest.mark.parametrize(
+    ("response", "status", "message"),
+    [
+        (
+            _sdk_response("max_tokens", text='{"identity_match": "yes", "ide'),
+            "error",
+            "output cut off at max_tokens (16000); nothing written",
+        ),
+        (
+            _sdk_response(text=_out_of_range_text()),
+            "error",
+            "model output did not parse (1 problems); nothing written",
+        ),
+        (
+            _sdk_response("refusal", category="bio"),
+            "refused",
+            "stop_reason refusal (bio); nothing written",
+        ),
+    ],
+    ids=["max_tokens", "score_out_of_range", "refusal"],
+)
+def test_unusable_reply_records_tokens_and_writes_nothing(
+    store, response, status, message
+):
+    seed(store, evidence=make_evidence())
+    client = AnthropicVetClient("unused", client=_sdk_client(response))
+    run = vet_channels(store, client, ["zoo-praha"])
+    [result] = run.results
+    assert (result.status, result.message) == (status, message)
+    assert (run.input_tokens, run.output_tokens) == (1000, 400)  # still paid for
+    assert (_files(store, "zoo-praha", "vet"), store.reviews("zoo-praha")) == ([], [])
+    assert run.failed
 
 
 FAKE_URL = "http://fake.invalid/v1/messages"  # never contacted
@@ -282,9 +376,10 @@ def _status_error(cls, status, kind, message):
 )
 def test_client_maps_api_errors(error, stops):
     client = AnthropicVetClient("unused", client=_sdk_client(error))
-    with pytest.raises(VetCallError) as caught:
+    with pytest.raises(VetError) as caught:
         client.vet(_prompt())
-    assert isinstance(caught.value, VetStoppingError) is stops
+    expected = VetStoppingError if stops else VetCallError
+    assert type(caught.value) is expected
     assert str(caught.value).startswith(f"Anthropic API {error.status_code} ")
 
 

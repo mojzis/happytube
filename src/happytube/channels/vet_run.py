@@ -3,17 +3,25 @@
 Shared by ``channels vet`` and, later, the web UI; no click or rich here. The call
 sits behind ``VetClient`` so tests use a fake (no network). Per-channel problems
 become results; an authentication, permission or billing error stops the run
-(``VetRun.aborted``), keeping the files already written.
+(``VetRun.aborted``), keeping the files already written. Human-rejected channels
+(the blocklist, decision 0003) are skipped without a call.
 """
 
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal, Protocol
 
 import anthropic
+from anthropic.types.beta import BetaContentBlock, BetaJSONOutputFormatParam
 from pydantic import ValidationError
 
-from happytube.channels.models import Channel, ChannelFlag, Evidence, VetUsage
-from happytube.channels.store import ChannelStore
+from happytube.channels.models import (
+    Channel,
+    ChannelFlag,
+    Evidence,
+    Verdict,
+    VetUsage,
+)
+from happytube.channels.store import ChannelStore, derive_status
 from happytube.channels.vet import (
     MODEL,
     Prompt,
@@ -28,12 +36,18 @@ from happytube.channels.vet import (
 )
 
 # Claude Opus 5.5 list prices, USD per million tokens. Estimates only: input is
-# counted at the base rate even when served from cache.
+# counted at the base rate even when served from cache, and a call the refusal
+# fallback answered with another model is still priced at Opus 5.5 rates.
 USD_PER_MTOK_INPUT = 4.0
 USD_PER_MTOK_OUTPUT = 20.0
 MAX_TOKENS = 16000
 EFFORT = "medium"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# Structured output: the SDK moves what the API cannot enforce (score 1-5) into
+# the descriptions; ``VetOutput.model_validate_json`` checks it on our side.
+OUTPUT_FORMAT = BetaJSONOutputFormatParam(
+    type="json_schema", schema=anthropic.transform_schema(VetOutput)
+)
 _STOPPING_TYPES = frozenset(
     {"authentication_error", "permission_error", "billing_error"}
 )
@@ -45,6 +59,7 @@ VetStatus = Literal[
     "would_vet",
     "skipped_current",
     "skipped_unresolved",
+    "skipped_rejected",
     "refused",
     "error",
     "not_vetted",
@@ -60,23 +75,31 @@ def estimate_usd(input_tokens: int, output_tokens: int) -> float:
     )
 
 
-class VetCallError(Exception):
+class VetError(Exception):
+    """A vet call failed without a response (nothing to bill or record)."""
+
+
+class VetCallError(VetError):
     """One call failed (after the SDK's retries); the run goes on."""
 
 
-class VetStoppingError(VetCallError):
+class VetStoppingError(VetError):
     """The key, its permissions or the credit balance failed; the run stops."""
 
 
 @dataclass
 class VetReply:
-    """What one call returned. ``output`` is ``None`` on a refusal."""
+    """What one call returned. ``model`` is the model that answered (the refusal
+    fallback may have switched it). ``output`` is ``None`` on a refusal (then
+    ``refusal_category``) or when the output is unusable (then ``error``); the
+    tokens were paid for either way."""
 
     output: VetOutput | None
     model: str
     usage: VetUsage
     stop_reason: str | None
     refusal_category: str | None = None
+    error: str | None = None
 
 
 class VetClient(Protocol):
@@ -93,17 +116,31 @@ def _error_detail(error: anthropic.APIStatusError) -> tuple[str, str]:
     return str(kind), str(detail.get("message") or "")
 
 
-def _call_error(error: anthropic.APIStatusError) -> VetCallError:
+def _call_error(error: anthropic.APIStatusError) -> VetError:
     """``VetStoppingError`` for a bad key, missing permission or no credit;
     ``VetCallError`` for anything else (rate limits and 5xx after retries)."""
     kind, message = _error_detail(error)
     text = f"Anthropic API {error.status_code} {kind}: {message}".rstrip(": ")
+    # A low credit balance comes back as 400 invalid_request_error, so only its
+    # message tells it apart from a bad request.
     stopping = (
         error.status_code in _STOPPING_STATUS
         or kind in _STOPPING_TYPES
         or "credit balance" in message.lower()
     )
     return VetStoppingError(text) if stopping else VetCallError(text)
+
+
+def _answer_text(content: list[BetaContentBlock]) -> str:
+    """The text of the answer: text blocks after the last ``fallback`` block
+    (non-streaming responses already drop a declined partial; this is a guard)."""
+    texts: list[str] = []
+    for block in content:
+        if block.type == "fallback":
+            texts = []
+        elif block.type == "text":
+            texts.append(block.text)
+    return "".join(texts)
 
 
 class AnthropicVetClient:
@@ -116,7 +153,7 @@ class AnthropicVetClient:
 
     def vet(self, prompt: Prompt) -> VetReply:
         try:
-            response = self._client.beta.messages.parse(
+            response = self._client.beta.messages.create(
                 model=MODEL,
                 max_tokens=MAX_TOKENS,
                 system=[
@@ -127,8 +164,7 @@ class AnthropicVetClient:
                     }
                 ],
                 messages=[{"role": "user", "content": prompt.user}],
-                output_config={"effort": EFFORT},
-                output_format=VetOutput,
+                output_config={"effort": EFFORT, "format": OUTPUT_FORMAT},
                 betas=[FALLBACK_BETA],
                 fallbacks="default",
             )
@@ -137,9 +173,6 @@ class AnthropicVetClient:
         except anthropic.APIConnectionError as e:
             msg = f"Anthropic API unreachable: {type(e).__name__}"
             raise VetCallError(msg) from None
-        except ValidationError as e:  # JSON cut short or not matching VetOutput
-            msg = f"model output did not parse ({e.error_count()} problems)"
-            raise VetCallError(msg) from None
         usage = response.usage
         tokens = VetUsage(
             input_tokens=usage.input_tokens
@@ -147,18 +180,20 @@ class AnthropicVetClient:
             + (usage.cache_read_input_tokens or 0),
             output_tokens=usage.output_tokens,
         )
-        if response.stop_reason == "refusal":
+        stop = response.stop_reason
+        if stop == "refusal":
             details = response.stop_details
-            return VetReply(
-                None,
-                response.model,
-                tokens,
-                response.stop_reason,
-                details.category if details else None,
-            )
-        return VetReply(
-            response.parsed_output, response.model, tokens, response.stop_reason
-        )
+            category = details.category if details else None
+            return VetReply(None, response.model, tokens, stop, category)
+        if stop == "max_tokens":
+            error = f"output cut off at max_tokens ({MAX_TOKENS})"
+            return VetReply(None, response.model, tokens, stop, error=error)
+        try:
+            output = VetOutput.model_validate_json(_answer_text(response.content))
+        except ValidationError as e:  # not JSON, or e.g. a score outside 1-5
+            error = f"model output did not parse ({e.error_count()} problems)"
+            return VetReply(None, response.model, tokens, stop, error=error)
+        return VetReply(output, response.model, tokens, stop)
 
 
 @dataclass
@@ -166,8 +201,9 @@ class VetResult:
     slug: str
     status: VetStatus
     flags: list[ChannelFlag] = field(default_factory=list)
-    verdict: str | None = None
-    model_verdict: str | None = None
+    verdict: Verdict | None = None
+    model_verdict: Verdict | None = None
+    model: str | None = None  # the model that answered, when one was called
     message: str | None = None
     path: str | None = None
     review_path: str | None = None
@@ -212,7 +248,7 @@ class VetRun:
             "results": [{**asdict(r), "usd": r.usd} for r in self.results],
             "aborted": self.aborted,
             "dry_run": self.dry_run,
-            "model": MODEL,
+            "requested_model": MODEL,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "usd": self.usd,
@@ -229,6 +265,9 @@ def _vet_one(
     """Vet one channel; ``client=None`` is a dry run. Raises
     ``VetStoppingError``; other call errors become an ``error`` result."""
     channel = store.get_channel(slug)
+    if derive_status(store.reviews(slug)) == "rejected":
+        message = "rejected by a human (blocklist); not vetted"
+        return VetResult(slug, "skipped_rejected", message=message)
     evidence = store.latest_evidence(slug)
     result = VetResult(slug, "skipped_unresolved", channel_flags(channel, evidence))
     if evidence is None or "unresolved" in result.flags:
@@ -259,20 +298,20 @@ def _call_and_write(
     review; fills ``result``. Raises ``VetStoppingError``."""
     try:
         reply = client.vet(build_prompt(channel, evidence))
-    except VetStoppingError:
-        raise
-    except VetCallError as e:
+    except VetCallError as e:  # VetStoppingError is not one: it stops the run
         result.status, result.message = "error", str(e)
         return
+    result.model = reply.model
     result.input_tokens = reply.usage.input_tokens
     result.output_tokens = reply.usage.output_tokens
-    if reply.stop_reason == "refusal" or reply.output is None:
-        result.status = "refused" if reply.stop_reason == "refusal" else "error"
-        result.message = (
-            f"stop_reason {reply.stop_reason}"
-            + (f" ({reply.refusal_category})" if reply.refusal_category else "")
-            + "; nothing written"
-        )
+    if reply.stop_reason == "refusal":
+        category = f" ({reply.refusal_category})" if reply.refusal_category else ""
+        result.status = "refused"
+        result.message = f"stop_reason refusal{category}; nothing written"
+        return
+    if reply.output is None:
+        problem = reply.error or f"no output (stop_reason {reply.stop_reason})"
+        result.status, result.message = "error", f"{problem}; nothing written"
         return
     try:
         report = build_report(
