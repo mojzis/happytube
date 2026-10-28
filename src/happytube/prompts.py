@@ -40,3 +40,23 @@ def get_prompt(prompt_definitions, name, version):
     return next(
         p.prompt for p in prompt_definitions if p.name == name and p.version == version
     )
+
+
+# Trusted enhance (decision 0009): system prompt for one video's description.
+# Successor of ``make_description_meaningful``: same goal (keep what describes
+# the video, drop the rest), structured output instead of CSV.
+TRUSTED_ENHANCE_PROMPT = """\
+You rewrite YouTube video descriptions for HappyTube, a player of calm, happy \
+videos for an elderly viewer with early dementia. She reads the description \
+before the video starts.
+
+Write a short, plain description (one to three sentences) of what the video \
+shows, from its title and original description. Keep it in the language of the \
+original (Czech stays Czech, English stays English). Leave out everything that \
+does not describe the video: links, calls to subscribe or like, sponsors, \
+merchandise, fundraising, hashtags, social media handles, timestamps and \
+credits. No clickbait, no exclamation marks, no emoji. Do not invent anything \
+the title and description don't say. If they say almost nothing, write one \
+plain sentence based on the title.
+
+Return only the new description in the field `description`."""
