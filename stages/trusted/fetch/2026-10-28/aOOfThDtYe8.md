@@ -1,0 +1,26 @@
+---
+video_id: aOOfThDtYe8
+title: 'Meet the Herd: Qinisa | San Diego Zoo Safari Park'
+channel_slug: san-diego-zoo
+channel_id: UCC5NfQ6Mf0dq_eEwv4P_hWA
+channel_name: San Diego Zoo
+languages:
+- en
+published_at: '2026-10-21T23:53:26Z'
+duration_s: 163
+shorts_source: uush
+fetched_at: '2026-10-28T22:31:00.124860Z'
+stage: trusted_fetch
+---
+
+# Meet the Herd: Qinisa | San Diego Zoo Safari Park
+
+Meet Qinisa, the daughter of the herd’s matriarch, Swazi. 👑
+
+Most elephants live in matriarchal, often multigenerational family groups made up of related females and their young. A female’s position in the herd can define their relationships and access to resources. As the daughter of the matriarch, Quinisa, or Nisa for short, is a bit of a princess. She knows mom is in the top spot, and that means she has also has access to the best foraging opportunities throughout the day. 
+
+The group responds to Swazi’s movements and defers to her wishes, so all Nisa has to do is follow along. Nisa also has a lot of friends, as the other elephants know they may also benefit if she favors them. 
+
+Through alliances and partnerships across continents and disciplines, San Diego Zoo Wildlife Alliance supports elephant conservation, including innovative discoveries in elephant behavior, communication, comprehensive health, and movement—alongside around-the-clock efforts to rescue, rehabilitate, and reintroduce orphaned elephants back into protected native habitats while supporting coexistence between people and these gentle giants. 
+
+By learning from and caring for elephants like Nisa at the Safari Park, and sharing that knowledge with conservation partners worldwide, we help to strengthen conservation strategies and create a future where elephant families and herds can thrive.
