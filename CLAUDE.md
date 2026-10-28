@@ -109,6 +109,10 @@ uv sync
 uv run madoqua install    # once; core.hooksPath is local config, not tracked
 ```
 
+`.python-version` pins 3.12 so the local venv matches CI. A new `git worktree` has no
+`.venv`: run `uv sync` in it before committing, or the madoqua hook blocks with
+"no virtualenv".
+
 ### Refreshing the toolbox
 
 ```
@@ -262,6 +266,8 @@ Configuration files are stored in `config/base/` (if they exist):
 
 - ty is in beta — may produce false positives. Prefer `# ty: ignore[rule]` over blanket suppression.
 - The commit hook auto-fixes and restages files. Only blocks on unfixable issues.
+- Don't run pytest (or `poe check`) concurrently in one checkout: the runs share
+  `.coverage` and the combine step can fail with `table coverage_schema already exists`.
 - gerenuk diffs the **working tree** against `origin/main`, so unstaged edits count, and
   any commit touching `pyproject.toml` or `uv.lock` runs the full suite. `--base HEAD`
   scopes it to the commit itself.
