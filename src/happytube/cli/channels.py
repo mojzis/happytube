@@ -246,7 +246,7 @@ def _print_evidence(evidence: dict[str, Any] | None, recent: int = 5) -> None:
     ]
     console.print("\n[bold]evidence[/bold] (latest; full list with --json)")
     for line in lines:
-        console.print(f"  {line}", highlight=False, markup=False)
+        console.print(f"  {line}", highlight=False, markup=False, soft_wrap=True)
 
 
 @channels.command("review")
