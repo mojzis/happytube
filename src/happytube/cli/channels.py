@@ -361,7 +361,8 @@ def _finish(run: Run | VetRun, as_json: bool, lines: Callable[[], list[str]]) ->
         msg = f"Stopped early: {run.aborted}"
         raise click.ClickException(msg)
     if run.failed:
-        msg = "Some channels failed; see the report above"
+        where = "the JSON on stdout" if as_json else "the report above"
+        msg = f"Some channels failed; see {where}"
         raise click.ClickException(msg)
 
 
@@ -410,7 +411,7 @@ def _report_vet(run: VetRun, as_json: bool) -> None:
             "dry run: no calls, no files"
             if run.dry_run
             else f"tokens: {run.input_tokens} in, {run.output_tokens} out, "
-            f"est. ${run.usd:.2f}"
+            f"est. ${run.usd:.2f} (estimate at Opus 5.5 rates)"
         )
         return [*out, total]
 
@@ -521,8 +522,9 @@ def vet_command(  # noqa: PLR0913 - one parameter per CLI option
 
     Writes an append-only vet report (vet/<time>.md) and an agent review per
     channel; agent reviews never change status. Channels whose latest vet used
-    the latest snapshot are skipped unless --force. Unresolved channels (no
-    channel_id or no snapshot) are skipped without a call.
+    the latest snapshot are skipped unless --force; after a prompt or model
+    change, pass --force to re-vet them. Unresolved channels (no channel_id or
+    no snapshot) and channels a human rejected are skipped without a call.
     """
     selected = _select_slugs(store, slugs, all_)
     client = None if dry_run else make_vet_client()

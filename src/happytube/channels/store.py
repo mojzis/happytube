@@ -31,6 +31,7 @@ from happytube.channels.models import (
     Review,
     Status,
     VetReport,
+    _iso_z,
     slugify,
 )
 
@@ -98,7 +99,7 @@ class StoredVet:
         """Verdict, flags, scores and suitable count — no per-video detail."""
         r = self.report
         return {
-            "vetted_at": r.model_dump(mode="json")["vetted_at"],
+            "vetted_at": _iso_z(r.vetted_at),
             "verdict": r.verdict,
             "model_verdict": r.model_verdict,
             "flags": list(r.flags),
@@ -151,7 +152,7 @@ class ChannelEntry:
                 else None
             ),
             "vetted_at": (
-                self.latest_vet.summary_dict()["vetted_at"] if self.latest_vet else None
+                _iso_z(self.latest_vet.report.vetted_at) if self.latest_vet else None
             ),
             "vet_verdict": self.latest_vet.report.verdict if self.latest_vet else None,
         }
@@ -237,13 +238,13 @@ def _load_records[M: BaseModel](
     model: type[M],
     timestamp: Callable[[M], datetime],
     suffix: str = YAML_SUFFIX,
+    load: Callable[[Path, type[M]], M] = _load_model,
 ) -> list[M]:
-    """Every record file in ``directory`` in write order: by ``timestamp``, then by
-    the filename's collision suffix (base file first, then ``-2``, ``-3`` …).
-    ``.md`` records are read by their frontmatter."""
+    """Every ``*<suffix>`` record file in ``directory``, read by ``load``, in write
+    order: by ``timestamp``, then by the filename's collision suffix (base file
+    first, then ``-2``, ``-3`` …)."""
     if not directory.is_dir():
         return []
-    load = _load_frontmatter if suffix == MARKDOWN_SUFFIX else _load_model
     paths = list(directory.glob(f"*{suffix}"))
     names = {p.name for p in paths}
     loaded = [(load(p, model), p.name) for p in paths]
@@ -385,6 +386,7 @@ class ChannelStore:
             VetReport,
             lambda v: v.vetted_at,
             MARKDOWN_SUFFIX,
+            _load_frontmatter,
         )
 
     def latest_vet(self, slug: str) -> StoredVet | None:

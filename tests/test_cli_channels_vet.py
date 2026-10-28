@@ -6,7 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from happytube.channels.store import ChannelStore
-from happytube.channels.vet_run import VetStoppingError
+from happytube.channels.vet_run import VetCallError, VetStoppingError
 from happytube.cli import channels as channels_cli
 from happytube.cli.commands import cli
 from tests.vet_helpers import FakeVetClient, make_channel, make_evidence, seed
@@ -65,7 +65,7 @@ def test_vet_text_shows_verdict_and_cost(store, claude):
     result = _run("vet", "zoo-praha")
     assert result.exit_code == 0, result.output
     assert "zoo-praha: vetted approve 6/6 suitable" in result.stdout
-    assert "tokens: 1000 in, 500 out, est. $0.01" in result.stdout
+    assert "tokens: 1000 in, 500 out, est. $0.01 (estimate at Opus 5.5" in result.stdout
 
 
 def test_second_vet_is_skipped(store, claude):
@@ -123,3 +123,22 @@ def test_show_text_summarises_the_latest_vet(store, claude):
     text = _run("show", "zoo-praha").stdout
     assert "verdict: approve (model: approve), flags: none" in text
     assert "suitable: 6 of 6 long-form, shorts skipped: 2" in text
+
+
+@pytest.mark.parametrize(
+    ("as_json", "where"),
+    [(True, "see the JSON on stdout"), (False, "see the report above")],
+)
+def test_channel_failure_message_points_to_the_output(
+    store, monkeypatch, as_json, where
+):
+    fake = FakeVetClient(make_evidence(), errors={0: VetCallError("overloaded")})
+    monkeypatch.setattr(channels_cli, "make_vet_client", lambda: fake)
+    result = _run("vet", "zoo-praha", *(["--json"] if as_json else []))
+    assert result.exit_code == 1
+    assert f"Some channels failed; {where}" in result.stderr
+
+
+def test_vet_help_says_force_after_a_prompt_change(store):
+    help_text = " ".join(_run("vet", "--help").stdout.split())
+    assert "after a prompt or model change, pass --force" in help_text

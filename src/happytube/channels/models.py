@@ -175,7 +175,6 @@ class Evidence(BaseModel):
 
 ChannelFlag = Literal["unresolved", "inactive", "mostly_shorts", "identity_doubt"]
 IdentityMatch = Literal["yes", "no", "unsure"]
-CHANNEL_FLAGS: tuple[str, ...] = get_args(ChannelFlag)
 
 
 class VetUsage(BaseModel):
