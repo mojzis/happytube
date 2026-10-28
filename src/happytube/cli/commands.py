@@ -2,7 +2,7 @@
 
 import asyncio
 import sys
-from datetime import date, datetime
+from datetime import date
 from functools import wraps
 from pathlib import Path
 
@@ -13,15 +13,14 @@ from rich.table import Table
 
 from happytube.config.config_manager import ConfigManager
 from happytube.config.settings import get_settings
+from happytube.models.video import MAX_HAPPINESS, MIN_HAPPINESS
 from happytube.stages.assess import AssessStage
 from happytube.stages.enhance import EnhanceStage
 from happytube.stages.fetch import FetchStage
 from happytube.stages.report import ReportStage
+from happytube.utils import today_local
 
 console = Console()
-
-MIN_HAPPINESS = 1
-MAX_HAPPINESS = 5
 
 
 def require_credentials(f):
@@ -45,7 +44,7 @@ def parse_date(date_str: str | None) -> date:
         Parsed date object or today's date
     """
     if date_str is None:
-        return datetime.now().astimezone().date()
+        return today_local()
 
     try:
         return date.fromisoformat(date_str)
@@ -229,7 +228,7 @@ def assess(date: str | None):
 @click.option(
     "--threshold",
     default=3,
-    type=int,
+    type=click.IntRange(MIN_HAPPINESS, MAX_HAPPINESS),
     help="Minimum happiness score to enhance (1-5 scale)",
 )
 @click.option(
@@ -248,10 +247,6 @@ def enhance(threshold: int, date: str | None):
         happytube enhance --threshold 3 --date 2025-11-16
     """
     target_date = parse_date(date)
-
-    if not MIN_HAPPINESS <= threshold <= MAX_HAPPINESS:
-        console.print("[red]✗ Threshold must be between 1 and 5[/red]")
-        sys.exit(1)
 
     console.print(
         Panel(
@@ -361,7 +356,7 @@ def report(date: str | None, days_back: int):
 @click.option(
     "--threshold",
     default=3,
-    type=int,
+    type=click.IntRange(MIN_HAPPINESS, MAX_HAPPINESS),
     help="Minimum happiness score to enhance (1-5 scale)",
 )
 @click.option(
