@@ -40,7 +40,7 @@ def extract_video_info(item: dict) -> dict | None:
             "published_at": snippet.get("publishedAt", ""),
         }
     except Exception as e:
-        logger.warning(f"Error extracting video info: {e}")
+        logger.warning("Error extracting video info: %s", e)
         return None
 
 
@@ -58,12 +58,13 @@ def load_videos_from_data_dir(data_dir: Path) -> list[dict[str, Any]]:
     seen_ids = set()
 
     if not data_dir.exists():
-        logger.warning(f"Data directory not found: {data_dir}")
+        # Debug: the server calls this per request and data/fetched has no writer.
+        logger.debug("Data directory not found: %s", data_dir)
         return videos
 
     # Look for JSON files in the data directory
     video_files = list(data_dir.glob("**/*.json"))
-    logger.info(f"Found {len(video_files)} JSON files to process")
+    logger.info("Found %d JSON files to process", len(video_files))
 
     for video_file in video_files:
         try:
@@ -80,9 +81,9 @@ def load_videos_from_data_dir(data_dir: Path) -> list[dict[str, Any]]:
                         seen_ids.add(video_info["video_id"])
 
         except Exception as e:
-            logger.warning(f"Error loading {video_file}: {e}")
+            logger.warning("Error loading %s: %s", video_file, e)
 
-    logger.info(f"Loaded {len(videos)} unique videos")
+    logger.info("Loaded %d unique videos", len(videos))
     return videos
 
 
@@ -116,7 +117,7 @@ def export_to_static(output_path: Path, data_dir: Path | None = None) -> None:
     with output_path.open("w") as f:
         json.dump(videos, f, indent=2)
 
-    logger.info(f"Exported {len(videos)} videos to {output_path}")
+    logger.info("Exported %d videos to %s", len(videos), output_path)
 
 
 def main():
@@ -129,7 +130,7 @@ def main():
     logger.info("Starting HappyTube static export...")
     export_to_static(output_file)
     logger.info("Export complete!")
-    logger.info(f"Static files ready for deployment in: {script_dir / 'static'}")
+    logger.info("Static files ready for deployment in: %s", script_dir / "static")
 
 
 if __name__ == "__main__":
