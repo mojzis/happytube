@@ -35,3 +35,24 @@ Orchestrator: user must fix ANTHROPIC_API_KEY (same as phase 2's YTKEY: user onl
 Review ‖ QA proceed with fakes.
 
 ## 2 — review ‖ QA
+Review (verdict ship): R1 medium — beta `parse` validates before return, so refusal
+check can't precede output read; max_tokens / out-of-range score → "did not parse"
+with stop_reason hidden and tokens (cost) unrecorded; fix: beta `create` with
+json_schema format, check stop_reason, then `model_validate_json`. R2 low — fallback
+model not recorded, cost priced at Opus 5.5. R3 low — CLAUDE.md "rest need no keys".
+R4 low — VetStoppingError subclass of VetCallError (handler order load-bearing);
+comment 'credit balance'. R5 low — cleanups (suffix-string loader choice, unused
+CHANNEL_FLAGS, summary_dict dumps whole report, verdict typed str). R6 low — prompt
+bump leaves vets current; say so in --help. Deviations: all accepted except parse →
+R1. Preexisting: ChannelStoreError mid-run aborts whole command, per-channel JSON lost.
+
+QA (verdict ship): all checks green (dry-run, no key, happy path with Czech, re-vet /
+--force / same-second collisions, refusal/parse/missing/extra id, 401 mid-run,
+529, real client over MockTransport, --json, other commands no keys, secret grep).
+Q1 low — `vet --all` vets human-rejected channels (paid, pointless). Q2 low — --json
+failure says "see the report above". Q3 low preexisting — legacy `report` needs both
+keys. Q4 low — vet asks for key even when nothing needs a call.
+
+Orchestrator: fix R1, R2, R3, R4, R5, R6, Q1, Q2. Defer Q3, Q4, preexisting abort.
+
+## 3 — fix
