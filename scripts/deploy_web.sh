@@ -44,9 +44,7 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Starting local server at http://localhost:8000"
     echo "Press Ctrl+C to stop and continue with deployment"
-    cd src/happytube/web/static
-    python -m http.server 8000
-    cd ../../..
+    (cd src/happytube/web/static && python -m http.server 8000)
 fi
 
 # Step 3: Commit and push (optional)
