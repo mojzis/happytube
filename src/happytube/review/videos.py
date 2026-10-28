@@ -32,6 +32,7 @@ from happytube.trusted.spot_checks import (
     load_video,
     new_review,
     queue_agreement,
+    reload_reviews,
     sections,
 )
 from happytube.trusted.video_reviews import (
@@ -193,7 +194,7 @@ def install_video_routes(
         reviews.add_review(video_id, review)
         if htmx:
             fresh = {"reviewer": review.reviewer, "flags": [], "notes": ""}
-            page = context(request, get(video_id), fresh)
+            page = context(request, reload_reviews(video, reviews), fresh)
             page["oob_shown"] = True
             response: Response = pages.render(request, "_video_reviews.html", page)
         else:

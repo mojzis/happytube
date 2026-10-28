@@ -1,6 +1,7 @@
 """``happytube videos`` over temp dirs (no network, no keys)."""
 
 import json
+import logging
 
 import pytest
 from click.testing import CliRunner
@@ -204,3 +205,10 @@ def test_malformed_review_listed_as_unreadable(run, tmp_path):
 def test_orphan_review_does_not_crash(run, tmp_path):
     review_store(tmp_path).add_review(vid(9), vreview())
     assert len(_json(run("list", "--json"))) == 2
+
+
+def test_bad_assess_file_warned_once_per_command(run, tmp_path, caplog):
+    write(tmp_path / "stages", "assess", 3, assess_fm(3, suitable="maybe"))
+    with caplog.at_level(logging.WARNING):
+        _json(_review(run))
+    assert caplog.text.count(f"{vid(3)}.md") == 1

@@ -48,7 +48,7 @@
         <td>{% if a.video_id is video_id %}<img src="https://i.ytimg.com/vi/{{ a.video_id }}/mqdefault.jpg" alt="" width="120" height="68" loading="lazy">{% endif %}</td>
         <td><a href="/videos/{{ a.video_id }}">{{ a.title }}</a><br><span class="slug">{{ a.channel_name }} · {{ a.duration_s|duration }}</span></td>
         <td>{{ a.published_at|dt }}</td>
-        <td><span class="verdict verdict-{{ 'suitable' if a.suitable else 'unsuitable' }}">{{ "suitable" if a.suitable else "unsuitable" }}</span><br><span class="muted">calm {{ a.calm }} · happy {{ a.happy }}</span>{% for f in a.flags %} <span class="flag">{{ f }}</span>{% endfor %}</td>
+        <td><span class="verdict verdict-{{ 'suitable' if a.suitable else 'unsuitable' }}">{{ "suitable" if a.suitable else "unsuitable" }}</span><br><span class="muted">calm {{ a.calm if a.calm is not none else "—" }} · happy {{ a.happy if a.happy is not none else "—" }}</span>{% for f in a.flags %} <span class="flag">{{ f }}</span>{% endfor %}{% if a.incomplete %} <span class="flag">incomplete assess</span>{% endif %}</td>
         <td>{% if v.shown %}<span class="badge shown-yes">shown</span>{% else %}<span class="muted">hidden</span>{% endif %}</td>
         <td>
           {% if v.state.error %}<span class="flag">unreadable review</span>

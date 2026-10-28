@@ -165,6 +165,34 @@ def test_post_writes_human_review_with_snapshot_and_hides(setup):
     assert shown(client) == [vid(3)]
 
 
+@pytest.fixture
+def incomplete(setup):
+    """Video 4 shown, its assess file lacking ``rubric_version``."""
+    client, reviews = setup
+    fm = assess_fm(4)
+    del fm["rubric_version"]
+    stages = reviews.root.parent / "stages"
+    write(stages, "assess", 4, fm)
+    write(stages, "enhance", 4, fm | {"enhanced_description": "Calm."})
+    return client, reviews
+
+
+def test_incomplete_assess_is_marked_in_queue_and_detail(incomplete):
+    client, _ = incomplete
+    assert vid(4) in shown(client)
+    assert "incomplete assess" in client.get(VIDEOS).text
+    assert "Incomplete assess" in client.get(video_url(4)).text
+
+
+def test_shown_video_with_incomplete_assess_can_be_hidden(incomplete):
+    client, reviews = incomplete
+    response = client.post(post_url(4), data=form(), follow_redirects=False)
+    assert response.status_code == 303
+    [path] = (reviews.root / vid(4)).iterdir()
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["rubric_version"] is None
+    assert vid(4) not in shown(client)
+
+
 def test_later_human_suitable_shows_it_again(setup):
     client, _ = setup
     client.post(post_url(1), data=form())

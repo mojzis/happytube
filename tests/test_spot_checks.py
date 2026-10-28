@@ -1,13 +1,14 @@
 """The spot-check queue: sections, order, snapshot vs current call (no I/O
 except ``load_spot_checks``)."""
 
+import logging
 from pathlib import Path
 
 import pytest
 
 from happytube.channels.models import Status
 from happytube.channels.store import ChannelStore
-from happytube.trusted.player import StageRecord
+from happytube.trusted.player import StageRecord, select_videos
 from happytube.trusted.spot_checks import (
     in_section,
     load_spot_checks,
@@ -119,10 +120,42 @@ def test_orphan_reviews_are_not_in_the_queue_or_stats():
     assert queue_agreement(current).reviewed == 0
 
 
-def test_assess_file_lacking_review_fields_is_skipped():
-    fm = assess_fm(1)
-    del fm["rubric_version"]
-    assert spot_videos([rec(fm)], [], STATUSES, {}) == []
+def test_shown_video_lacking_snapshot_fields_stays_in_the_queue(caplog):
+    fm = assess_fm(1, calm="very")
+    del fm["rubric_version"], fm["assessed_at"]
+    with caplog.at_level(logging.WARNING):
+        [video] = spot_videos([rec(fm)], [enh(1)], STATUSES, {})
+    assert (video.shown, video.section, video.assess.incomplete) == (
+        True,
+        "shown",
+        True,
+    )
+    assert caplog.text.count("calm, rubric_version, assessed_at") == 1
+    review = new_review(
+        video,
+        reviewer="mojzis",
+        role="human",
+        verdict="unsuitable",
+        flags=[],
+        watched="full",
+        notes=None,
+    )
+    assert (review.rubric_version, review.assessed_at) == (None, None)
+    hidden = {vid(1): ReviewState([review])}
+    [after] = spot_videos([rec(fm)], [enh(1)], STATUSES, hidden)
+    assert (after.shown, after.section) == (False, "reviewed")
+
+
+def test_queue_shown_matches_the_player_selection():
+    assess = [rec(assess_fm(n, suitable=n != 2)) for n in (1, 2, 3, 4)]
+    enhance = [enh(1), enh(2), enh(4)]
+    statuses: dict[str, Status] = {"zoo": "approved"}
+    states = {vid(4): ReviewState([vreview("unsuitable")])}
+    queue = {
+        v.video_id for v in spot_videos(assess, enhance, statuses, states) if v.shown
+    }
+    player = {v.video_id for v in select_videos(assess, enhance, statuses, {vid(4)})}
+    assert queue == player == {vid(1)}
 
 
 @pytest.mark.parametrize(

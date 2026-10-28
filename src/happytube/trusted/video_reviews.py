@@ -67,9 +67,12 @@ class VideoReview(BaseModel):
     notes: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     # The agent's call this review was compared with, from the assess file.
+    # ``suitable`` is always there (the player needs it); the other two are
+    # ``None`` when that assess file lacked them, so a shown video can still be
+    # reviewed and hidden.
     agent_suitable: StrictBool
-    rubric_version: int = Field(ge=1)
-    assessed_at: datetime
+    rubric_version: int | None = Field(default=None, ge=1)
+    assessed_at: datetime | None = None
 
     @field_validator("flags")
     @classmethod
@@ -78,12 +81,12 @@ class VideoReview(BaseModel):
 
     @field_validator("created_at", "assessed_at")
     @classmethod
-    def _times_utc(cls, value: datetime) -> datetime:
-        return as_utc(value)
+    def _times_utc(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else as_utc(value)
 
     @field_serializer("created_at", "assessed_at")
-    def _dump_times(self, value: datetime) -> str:
-        return iso_z(value)
+    def _dump_times(self, value: datetime | None) -> str | None:
+        return None if value is None else iso_z(value)
 
     @property
     def disagrees(self) -> bool:
@@ -186,17 +189,20 @@ class VideoReviewStore:
             dump_yaml(review.model_dump(mode="json")),
         )
 
+    def state(self, video_id: str) -> ReviewState:
+        """A video's state. Reviews that cannot be read are kept as the error (so
+        the video is hidden), with a warning naming the file."""
+        try:
+            return ReviewState(self.reviews(video_id))
+        except (VideoNotFoundError, VideoReviewsMissingError):
+            raise
+        except StoreError as e:
+            logger.warning("Hiding video %s: %s", video_id, e)
+            return ReviewState(error=str(e))
+
     def states(self) -> dict[str, ReviewState]:
-        """Every reviewed video's state. A video whose reviews cannot be read is
-        kept with its error (so it is hidden), with a warning naming the file."""
-        states = {}
-        for video_id in self.video_ids():
-            try:
-                states[video_id] = ReviewState(self.reviews(video_id))
-            except StoreError as e:
-                logger.warning("Hiding video %s: %s", video_id, e)
-                states[video_id] = ReviewState(error=str(e))
-        return states
+        """Every reviewed video's state (see ``state``)."""
+        return {video_id: self.state(video_id) for video_id in self.video_ids()}
 
 
 def hidden_ids(states: Mapping[str, ReviewState]) -> frozenset[str]:

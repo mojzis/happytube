@@ -36,6 +36,7 @@ from happytube.trusted.spot_checks import (
     load_video,
     new_review,
     queue_agreement,
+    reload_reviews,
 )
 from happytube.trusted.video_reviews import (
     VIDEO_VERDICTS,
@@ -194,7 +195,7 @@ def review_video(  # noqa: PLR0913 - one parameter per CLI option
         notes=notes,
     )
     path = dirs.reviews.add_review(video_id, review)
-    after = dirs.get(video_id)
+    after = reload_reviews(video, dirs.reviews)
     if as_json:
         echo_json(
             {

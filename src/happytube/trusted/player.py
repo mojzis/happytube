@@ -110,6 +110,20 @@ def enhanced_descriptions(enhance: list[StageRecord]) -> dict[str, str | None]:
     }
 
 
+def eligible(
+    assessed: Assessed | None, description: str | None, statuses: Mapping[str, Status]
+) -> bool:
+    """Rules 1 to 3: scored suitable, enhanced, channel approved now. Rule 4 (not
+    hidden by a human) is ``select_videos``'s; the spot-check queue shares this
+    predicate, so it and the player never disagree about what is shown."""
+    return (
+        assessed is not None
+        and assessed.suitable is True
+        and description is not None
+        and statuses.get(assessed.channel_slug) == "approved"
+    )
+
+
 def select_videos(
     assess: list[StageRecord],
     enhance: list[StageRecord],
@@ -128,9 +142,8 @@ def select_videos(
         if (
             video_id in hidden
             or assessed is None
-            or assessed.suitable is not True
-            or description is None
-            or statuses.get(assessed.channel_slug) != "approved"
+            or description is None  # narrows for ty; eligible checks it too
+            or not eligible(assessed, description, statuses)
         ):
             continue
         shown.append(

@@ -21,12 +21,13 @@
 
 <section class="card">
   <h2>Agent's call <span class="muted">(current assess file)</span></h2>
+  {% if a.incomplete %}<p class="error-message">Incomplete assess: this file lacks {{ a.missing()|join(", ") }}. You can still spot-check (and hide) the video; the review keeps what is there.</p>{% endif %}
   <dl class="facts">
     <dt>Suitable</dt><dd><span class="verdict verdict-{{ 'suitable' if a.suitable else 'unsuitable' }}">{{ "suitable" if a.suitable else "unsuitable" }}</span></dd>
-    <dt>Calm / happy</dt><dd>{{ a.calm }} / {{ a.happy }}</dd>
+    <dt>Calm / happy</dt><dd>{{ a.calm if a.calm is not none else "—" }} / {{ a.happy if a.happy is not none else "—" }}</dd>
     <dt>Flags</dt><dd>{% for f in a.flags %}<span class="flag">{{ f }}</span> {% else %}none{% endfor %}</dd>
     <dt>Note</dt><dd class="text">{{ a.note or "—" }}</dd>
-    <dt>Assessed</dt><dd>{{ a.assessed_at|dt }}, rubric v{{ a.rubric_version }}</dd>
+    <dt>Assessed</dt><dd>{{ a.assessed_at|dt }}, rubric {{ "v%s"|format(a.rubric_version) if a.rubric_version else "—" }}</dd>
     <dt>File</dt><dd class="path">{{ video.path }}</dd>
   </dl>
 </section>

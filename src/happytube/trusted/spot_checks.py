@@ -5,20 +5,30 @@ Every assessed trusted video is in the queue, in three sections: unreviewed
 videos the player shows now first (a false positive is what hurts her), then the
 other unreviewed ones (agent misses, for tuning the rubric), then the reviewed
 ones. "Reviewed" means a human review: agent reviews never count. Whether a
-video is shown is the player's own rule (``select_videos``), so the queue and
-the player can never disagree about it.
+video is shown is the player's own rule (``player.eligible`` plus the review
+state), so the queue and the player can never disagree about it. Every video the
+player could show is in the queue: an assess file lacking the fields only a
+spot-check uses is kept, marked incomplete.
 
 Pure over stage records, channel statuses and review states; ``load_spot_checks``
 does the reading. A review directory without an assess file (an orphan) is not in
 the queue.
 """
 
+import logging
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal, get_args
 
-from pydantic import AwareDatetime, Field
+from pydantic import (
+    AwareDatetime,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    ValidatorFunctionWrapHandler,
+    field_validator,
+)
 
 from happytube.channels.models import Status
 from happytube.channels.store import ChannelStore
@@ -26,11 +36,11 @@ from happytube.trusted.player import (
     Assessed,
     StageRecord,
     channel_statuses,
+    eligible,
     enhanced_descriptions,
     latest_per_video,
     parse_assessed,
     read_stage,
-    select_videos,
 )
 from happytube.trusted.stages import TrustedStage, is_video_id
 from happytube.trusted.video_reviews import (
@@ -41,8 +51,9 @@ from happytube.trusted.video_reviews import (
     VideoReview,
     VideoReviewStore,
     agreement,
-    hidden_ids,
 )
+
+logger = logging.getLogger(__name__)
 
 Section = Literal["shown", "unreviewed", "reviewed"]
 SECTIONS: tuple[str, ...] = get_args(Section)
@@ -50,15 +61,49 @@ SECTIONS: tuple[str, ...] = get_args(Section)
 SECTION_FILTERS: tuple[str, ...] = (*SECTIONS, "disagree")
 
 
-class SpotAssess(Assessed):
-    """The assess-file fields a spot-check shows and snapshots."""
+_SPOT_FIELDS = ("calm", "happy", "flags", "note", "rubric_version", "assessed_at")
 
-    calm: int
-    happy: int
+
+class SpotAssess(Assessed):
+    """The assess-file fields a spot-check shows and snapshots. Beyond the
+    player's own fields (``Assessed``) every one is lenient: missing or bad
+    means ``None`` / empty, so any file the player can read parses here too."""
+
+    calm: int | None = None
+    happy: int | None = None
     flags: list[str] = Field(default_factory=list)
     note: str = ""
-    rubric_version: int = Field(ge=1)
-    assessed_at: AwareDatetime
+    rubric_version: int | None = Field(default=None, ge=1)
+    assessed_at: AwareDatetime | None = None
+
+    @field_validator(*_SPOT_FIELDS, mode="wrap")
+    @classmethod
+    def _lenient(
+        cls, value: object, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
+    ) -> object:
+        try:
+            return handler(value)
+        except ValidationError:
+            field = cls.model_fields[str(info.field_name)]
+            return field.get_default(call_default_factory=True)
+
+    def missing(self) -> list[str]:
+        """The spot-check fields this assess file lacks (or has unreadable)."""
+        return [name for name in _SPOT_FIELDS if getattr(self, name) is None]
+
+    @property
+    def incomplete(self) -> bool:
+        """Missing part of the snapshot a review keeps."""
+        return self.rubric_version is None or self.assessed_at is None
+
+
+def rescored_since(review: VideoReview, assess: SpotAssess) -> bool:
+    """The agent's call was redone after ``review`` was given."""
+    return (
+        review.assessed_at != assess.assessed_at
+        or review.agent_suitable != assess.suitable
+        or review.rubric_version != assess.rubric_version
+    )
 
 
 def original_description(body: str, title: str) -> str:
@@ -76,8 +121,13 @@ class SpotVideo:
     path: Path
     description: str
     enhanced: str | None
-    shown: bool
+    eligible: bool  # player rules 1-3 (``player.eligible``)
     state: ReviewState
+
+    @property
+    def shown(self) -> bool:
+        """In the player now: eligible and not hidden by a human (rule 4)."""
+        return self.eligible and not self.state.hidden
 
     @property
     def video_id(self) -> str:
@@ -102,11 +152,11 @@ class SpotVideo:
     def assess_changed(self) -> bool:
         """The agent's call was redone since the deciding review was given."""
         latest = self.latest
-        return latest is not None and (
-            latest.assessed_at != self.assess.assessed_at
-            or latest.agent_suitable != self.assess.suitable
-            or latest.rubric_version != self.assess.rubric_version
-        )
+        return latest is not None and self.rescored(latest)
+
+    def rescored(self, review: VideoReview) -> bool:
+        """``rescored_since`` against this video's current call."""
+        return rescored_since(review, self.assess)
 
     def summary_dict(self) -> dict[str, Any]:
         a = self.assess
@@ -123,6 +173,7 @@ class SpotVideo:
             "calm": a.calm,
             "happy": a.happy,
             "flags": list(a.flags),
+            "assess_incomplete": a.incomplete,
             "shown": self.shown,
             "section": self.section,
             "verdict": self.latest.verdict if self.latest else None,
@@ -153,27 +204,39 @@ def spot_videos(
     states: Mapping[str, ReviewState],
 ) -> list[SpotVideo]:
     """Every readable assessed video (latest copy per id), newest published
-    first. An assess file the player cannot read is skipped with its warning."""
-    shown = {
-        v.video_id for v in select_videos(assess, enhance, statuses, hidden_ids(states))
-    }
+    first; each file is parsed once. An assess file the player cannot read is
+    skipped with its warning; one lacking spot-check fields is kept (warned,
+    ``assess.incomplete``)."""
     descriptions = enhanced_descriptions(enhance)
     videos = []
     for video_id, record in latest_per_video(assess).items():
         parsed = parse_assessed(record, SpotAssess)
         if parsed is None:
             continue
+        if missing := parsed.missing():
+            logger.warning(
+                "Incomplete assess %s: bad or missing %s",
+                record.path,
+                ", ".join(missing),
+            )
+        enhanced = descriptions.get(video_id)
         videos.append(
             SpotVideo(
                 assess=parsed,
                 path=record.path,
                 description=original_description(record.body, parsed.title),
-                enhanced=descriptions.get(video_id),
-                shown=video_id in shown,
+                enhanced=enhanced,
+                eligible=eligible(parsed, enhanced, statuses),
                 state=states.get(video_id, NO_REVIEWS),
             )
         )
     return _newest_first(videos)
+
+
+def reload_reviews(video: SpotVideo, store: VideoReviewStore) -> SpotVideo:
+    """``video`` with its reviews read again (after a write), without
+    re-reading the stages."""
+    return replace(video, state=store.state(video.video_id))
 
 
 def _newest_first(videos: Iterable[SpotVideo]) -> list[SpotVideo]:

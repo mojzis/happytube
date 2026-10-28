@@ -16,7 +16,7 @@
       </div>
       {% if r.flags %}<p>{% for f in r.flags %}<span class="flag">{{ f }}</span> {% endfor %}</p>{% endif %}
       {% if r.notes %}<p class="text">{{ r.notes }}</p>{% endif %}
-      <p class="muted">Compared with: agent {{ "suitable" if r.agent_suitable else "unsuitable" }}, rubric v{{ r.rubric_version }}, assessed {{ r.assessed_at|dt }}{% if r.assessed_at != a.assessed_at or r.agent_suitable != a.suitable or r.rubric_version != a.rubric_version %} — <span class="flag">rescored since</span>{% endif %}</p>
+      <p class="muted">Compared with: agent {{ "suitable" if r.agent_suitable else "unsuitable" }}, rubric {{ "v%s"|format(r.rubric_version) if r.rubric_version else "—" }}, assessed {{ r.assessed_at|dt }}{% if video.rescored(r) %} — <span class="flag">rescored since</span>{% endif %}</p>
     </li>
   {% endfor %}
   </ol>
