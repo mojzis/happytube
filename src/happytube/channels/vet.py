@@ -23,7 +23,7 @@ from happytube.channels.models import (
     VetVideo,
 )
 from happytube.claude import Prompt
-from happytube.rubric import RUBRIC, Score, VideoScore, is_suitable
+from happytube.rubric import RUBRIC, Score, VideoScore, id_mismatch, is_suitable
 
 PROMPT_VERSION = 1
 REVIEWER = "claude-vet"
@@ -178,17 +178,9 @@ def check_video_ids(output: VetOutput, evidence: Evidence) -> None:
     """Every long-form video scored exactly once and nothing else; raises
     ``VetOutputError`` naming the ids otherwise."""
     expected = [v.video_id for v in long_form(evidence)]
-    got = [v.video_id for v in output.videos]
-    problems = []
-    if missing := sorted(set(expected) - set(got)):
-        problems.append(f"missing {', '.join(missing)}")
-    if extra := sorted(set(got) - set(expected)):
-        problems.append(f"unexpected {', '.join(extra)}")
-    if duplicate := sorted({i for i in got if got.count(i) > 1}):
-        problems.append(f"scored twice {', '.join(duplicate)}")
-    if problems:
-        msg = "model output does not match the videos sent: " + "; ".join(problems)
-        raise VetOutputError(msg)
+    problem = id_mismatch(expected, [v.video_id for v in output.videos])
+    if problem:
+        raise VetOutputError(problem)
 
 
 def build_report(  # noqa: PLR0913 - the parts of one report

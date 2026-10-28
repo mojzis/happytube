@@ -145,7 +145,7 @@ def resolve_channels(
     return run
 
 
-def _short_ids(
+def fetch_short_ids(
     client: YouTubeClient, channel_id: str, max_videos: int
 ) -> set[str] | None:
     """Ids in the channel's ``UUSH…`` Shorts playlist (1 unit).
@@ -183,7 +183,7 @@ def _snapshot(
         except YouTubeError as e:
             if not is_playlist_not_found(e):
                 raise
-    short_ids = _short_ids(client, item["id"], max_videos) if ids else set()
+    short_ids = fetch_short_ids(client, item["id"], max_videos) if ids else set()
     evidence = build_evidence(item, client.videos(ids), short_ids=short_ids)
     result.path = str(store.add_evidence(result.slug, evidence))
     result.status = "written"
