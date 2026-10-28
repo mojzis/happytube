@@ -43,3 +43,46 @@ Report (verbatim JSON, abridged formatting):
   cli/trusted.py imports private helpers from cli/channels.py.
 - unresolved: player still legacy (5b); failed/refused batch re-paid each rerun;
   quota stop mid-channel leaves files but result `error` with no paths.
+
+## 2a — review
+Verdict `fix`. Findings (verbatim, abridged):
+
+- R1 medium — a per-channel fetch error (or assess batch error) stops `run`; assess/
+  enhance read only `--date`, seen set blocks refetch → other channels' videos of
+  that date never assessed by later daily runs. Reproduced with fakes. Fix: assess/
+  enhance pick up every pending file up to `--date`, or `run` continues past
+  per-channel fetch errors (exit ≠ 0, stop only on quota/key). Record in 0009.
+- R2 medium — `assess --force` turning a video unsuitable leaves its enhance file
+  (reproduced). Fix: delete enhance file when no longer suitable, or readers gate on
+  assess `suitable`; test.
+- R3 low — `run` without ANTHROPIC_API_KEY: ClickException in assess before anything
+  printed; fetch report lost, `--json` empty. Fix: check key up front or print fetch
+  step first.
+- R4 low — YouTube video_id becomes a filename unchecked. Fix: `^[A-Za-z0-9_-]{11}$`.
+- R5 low — claude.py imports VetUsage from channels.models (layering). Fix: Usage in
+  claude.py, VetUsage the alias.
+- R6 low — cli/trusted.py imports 4 private helpers from cli/channels.py. Fix: public
+  or cli/common.py.
+- preexisting: UTC published date vs local `--date` window edge; fallback/cache priced
+  at Opus base rates (documented).
+- deviations judged: ClaudeCaller byte-identical to old vet call, checked vs SDK;
+  aliases used by tests, OK; no fail path ends exit 0; quota mid-channel can't leave
+  files (videos() returns before first write) — dev's concern doesn't apply;
+  TrustedStage/--date callback/skipped_unresolved OK; re-paid batches OK for now.
+
+## 2b — QA
+Verdict `fix`. poe check green (445, 82%). Verified (abridged): `--json` contract and
+exit codes for every subcommand (success 0, error 1, stop 1, bad date 2, unknown /
+candidate slug 1); keys: status, dry-runs, nothing-to-do need none, missing key →
+clear error exit 1; fake YTKEY (1 unit) and fake Anthropic key stop, nothing
+written, no key text anywhere; run chain stops on fetch error and assess stop;
+status counts match seeded files; daily_run.sh stubbed both modes, failure → exit 1,
+unknown pipeline → 2; legacy fetch fake key → exit 1, legacy help unchanged, vet
+dry-run OK; frontmatter fields complete, Czech + emoji round-trip; idempotent.
+
+- Q1 medium — = R2 (enhance file stays after `assess --force` → unsuitable).
+- Q2 low — fetch JSON: `channel_id` null for not_fetched and the stopping channel.
+- Q3 low — fetch checks YTKEY before slugs: unknown slug without key → "YTKEY is not
+  set".
+- preexisting: MarkdownFile.save without allow_unicode (Czech escaped in files);
+  daily_run.sh hardcodes HAPPYTUBE_DIR=/home/user/happytube; legacy stages ~20% cov.
