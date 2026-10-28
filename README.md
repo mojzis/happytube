@@ -74,23 +74,18 @@ The web player provides a controlled YouTube viewing experience:
 - Fullscreen support
 - **Deploy to GitHub Pages for free** - no backend required!
 
-### Deployment
-
-Deploy your curated video collection to GitHub Pages:
+### Running and deployment
 
 ```bash
-# Export videos to static files
-uv run python -m happytube.web.export
+# Local: the player at http://127.0.0.1:8000/player/ (live from stages/trusted/)
+uv run happytube serve
 
-# Or use the interactive deployment script
-./scripts/deploy_web.sh
+# Static videos.json (CI does this for GitHub Pages)
+uv run python -m happytube.web.export
 ```
 
-See `src/happytube/web/DEPLOYMENT.md` for detailed deployment instructions including:
-- GitHub Pages setup
-- Netlify/Vercel deployment
-- GitHub Actions automation
-- Custom domains
+The deployed player is built from the committed `stages/trusted/` on every push to
+`main`; see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 See `src/happytube/web/README.md` for player details.
 

@@ -8,8 +8,9 @@ HappyTube finds calm, happy YouTube videos for vulnerable viewers (first audienc
 grandmother with early dementia). The trusted pipeline (`happytube trusted`) fetches
 new videos only from human-approved channels, scores each with the calm/happy rubric
 (Claude) and cleans the descriptions of the suitable ones. The legacy pipeline
-(search by category, happiness 1–5) still runs side by side; the player still reads
-legacy data until phase 5b (see Project plan).
+(search by category, happiness 1–5) still runs side by side. The player shows only
+the trusted pipeline's suitable, enhanced videos of currently approved channels
+(decision 0010).
 
 ## Project plan
 
@@ -42,8 +43,10 @@ happytube --help                                       # or <command> --help
 ```
 
 Run via `uv run happytube …`. Daily automation: `./scripts/daily_run.sh` (cron-ready;
-legacy by default, `HAPPYTUBE_PIPELINE=trusted` runs `trusted run` instead; runs in
-its own repo unless `HAPPYTUBE_DIR` is set).
+legacy by default, `HAPPYTUBE_PIPELINE=trusted` runs `trusted run` instead; with
+`HAPPYTUBE_PUSH=1` too, it then commits only `stages/trusted/` and pushes, also after
+a failed run that wrote files — off by default; runs in its own repo unless
+`HAPPYTUBE_DIR` is set).
 
 ### Trusted pipeline (decision 0009)
 
@@ -119,7 +122,8 @@ rest).
 ### Review UI
 
 ```bash
-happytube serve [--host 127.0.0.1] [--port 8000] [--channels-dir PATH] [--reviewer NAME]
+happytube serve [--host 127.0.0.1] [--port 8000] [--channels-dir PATH] \
+    [--stages-dir PATH] [--reviewer NAME]
 ```
 
 Local FastAPI + htmx page (decision 0007) at `http://127.0.0.1:8000/channels`: a
@@ -132,26 +136,33 @@ yourself; the app runs no git. `--channels-dir` is the same option and env as th
 name the browser remembers). Only loopback `Host` headers and same-origin POSTs
 are accepted; a non-loopback `--host` (LAN IPv4/IPv6) warns (no auth), a wildcard
 `0.0.0.0` / `::` is refused. htmx is vendored in
-`review/static/`, no external JS/CSS.
+`review/static/`, no external JS/CSS. The same app serves the player (below).
 
 ### Web player
 
 ```bash
-uv run python -m happytube.web.server   # Flask dev server, http://127.0.0.1:5000
-uv run python -m happytube.web.export   # static videos.json for GitHub Pages
-./scripts/deploy_web.sh                 # interactive export + deploy helper
+happytube serve                         # player at http://127.0.0.1:8000/player/
+uv run python -m happytube.web.export [--stages-dir stages] [--channels-dir …] [--output …]
 ```
 
-`.github/workflows/deploy.yml` builds and deploys `src/happytube/web/static` to GitHub
-Pages — manual trigger only for now; see [DEPLOYMENT.md](DEPLOYMENT.md). Known gap: the player and export read
-legacy raw JSON from `data/fetched/`, which nothing writes any more (the stages write
-`stages/`), so the export currently yields 0 videos.
+Decision 0010. Shown iff assess `suitable: true` **and** an enhance file with a
+non-empty `enhanced_description` **and** the channel is approved *now*; fields from
+assess, only the description from enhance; newest `published_at` first. One pure
+rule, `trusted.player.select_videos`, used by `GET /player/videos.json` (live per
+request from `--stages-dir` / `HAPPYTUBE_STAGES_DIR`, default `stages/` in the cwd)
+and the export. A bad stage file is skipped with a warning naming it. `player.js`
+fetches `videos.json` relative to the page (one path, local and Pages). The export
+writes `web/static/videos.json` (git-ignored build product); a missing
+`stages/trusted/` or registry exits 1, an empty selection warns, exit 0.
+`.github/workflows/deploy.yml` builds it from the **committed `stages/trusted/`** +
+`channels/` and deploys to https://mojzis.github.io/happytube/ on a push to `main`
+touching them or the player (or manually); see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Stack
 
 uv, ruff (lint/format), ty (type check), pytest, poethepoet (task runner). Python
 >=3.12, src layout (`src/happytube/`), hatchling build. Runtime: click, rich, pandas,
-pyarrow, pydantic(-settings), anthropic, requests, flask, jinja2, pyyaml, fastapi,
+pyarrow, pydantic(-settings), anthropic, requests, jinja2, pyyaml, fastapi,
 uvicorn, python-multipart (httpx in dev, for `TestClient`).
 
 ## Toolbox
@@ -241,8 +252,8 @@ from the repo root.
    rewrites the description without clickbait, spam and promotion.
 4. **Report** (`stages/report.py`) — HTML report from `templates/daily_report.html`
    (Jinja, autoescaped) and parquet exports under `parquet/`.
-5. **Web player** (`web/`) — Flask app + static export; YouTube embed with
-   recommendations disabled.
+5. **Web player** (`web/`) — no longer reads legacy data: it shows the trusted
+   pipeline's output (see Web player above).
 
 ### Key modules
 
@@ -255,15 +266,17 @@ from the repo root.
   `estimate_usd`), used by `channels vet` and the trusted pipeline.
 - `trusted/` — `stages.py` (`TrustedStage`, `pending`, `is_video_id`, `status_counts`), `fetch.py`
   (`fetch_trusted`, `FetchRun`), `assess.py`, `enhance.py`, `runs.py` (`ItemRun`,
-  `run_items`, `TrustedClient` protocol).
+  `run_items`, `TrustedClient` protocol), `player.py` (`select_videos`,
+  `PlayerVideo`, `read_stage`, `player_videos` — the player's selection).
 - `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),
   `store.py` (`ChannelStore`, `derive_status`), `evidence.py` (pure API → `Evidence`
   builder, Shorts by `UUSH` ids or duration), `collect.py` (resolve / evidence
   runs), `vet.py` (pure vetting: flags, prompt, verdict rule, report) and
   `vet_run.py` (`AnthropicVetClient` behind a `VetClient` protocol, `vet_channels`);
   the CLI and the future web UI share them.
-- `review/` — local review UI: `app.py` (`create_app(store, default_reviewer=…)`
-  factory, routes, Host/Origin guard), `queue.py` (pure `queue_sections` sort),
+- `review/` — local review UI + player: `app.py` (`create_app(store,
+  default_reviewer=…, stages_dir=…)` factory, routes incl. `/player/`, Host/Origin
+  guard), `queue.py` (pure `queue_sections` sort),
   `templates/`, `static/` (vendored htmx, `review.css`); reads and writes only
   through `ChannelStore`.
 - `rubric.py` — calm/happy rubric (`RUBRIC_VERSION`), video flags, `VideoScore`,
@@ -280,7 +293,8 @@ from the repo root.
 ```
 # Stage-based data
 stages/
-├── trusted/            # trusted pipeline (decision 0009), <video_id>.md per video
+├── trusted/            # trusted pipeline (0009), <video_id>.md per video; git-TRACKED
+│   │                   #   (the player's deployed data, 0010); other stages/ ignored
 │   ├── fetch/YYYY-MM-DD/      # new long-form videos of approved channels
 │   ├── assess/YYYY-MM-DD/     # + calm, happy, flags, note, suitable, rubric_version
 │   └── enhance/YYYY-MM-DD/    # suitable only, + enhanced_description
@@ -334,7 +348,7 @@ logs/
 ├── YYYY-MM-DD.log     # Daily pipeline logs
 └── cron.log           # Cron job logs
 
-# Legacy data (git-ignored; the web player still reads data/fetched/)
+# Legacy data (git-ignored; legacy videos.py search still writes data/fetched/)
 data/
 ├── categories.json      # YouTube category definitions
 └── fetched/
@@ -350,14 +364,12 @@ src/happytube/review/
 
 # Web player
 src/happytube/web/
-├── server.py           # Flask backend (dev mode)
-├── export.py           # Static export script
-├── static/             # Static assets & deployment files
-│   ├── index.html      # Static version for deployment
-│   ├── player.js       # Player logic (works in both modes)
-│   ├── styles.css      # Styling
-│   └── videos.json     # Generated by export.py
-└── templates/          # Flask templates
+├── export.py           # python -m happytube.web.export → static/videos.json
+└── static/             # served at /player/ by happytube serve; deployed to Pages
+    ├── index.html      # the player page
+    ├── player.js       # loads videos.json next to the page
+    ├── styles.css
+    └── videos.json     # build product (git-ignored)
 ```
 
 ## Configuration
