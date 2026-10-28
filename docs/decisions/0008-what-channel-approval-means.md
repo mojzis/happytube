@@ -1,7 +1,8 @@
 # 0008 What a channel approval means
 
 Date: 2026-10-28
-Status: accepted
+Status: accepted (amended by 0011: a human "unsuitable" spot-check also hides
+that one video)
 
 ## Context
 

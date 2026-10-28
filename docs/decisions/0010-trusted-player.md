@@ -1,7 +1,8 @@
 # 0010 The trusted player
 
 Date: 2026-10-28
-Status: accepted
+Status: accepted (amended by 0011: selection rule 4, not hidden by a human
+spot-check)
 
 ## Context
 
