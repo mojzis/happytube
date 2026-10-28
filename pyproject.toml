@@ -19,6 +19,9 @@ dependencies = [
     "click>=8.1.7",
     "pyyaml>=6.0",
     "requests>=2.32",
+    "fastapi>=0.162.0",
+    "uvicorn>=0.54.0",
+    "python-multipart>=0.0.32",
 ]
 
 [project.scripts]
@@ -49,6 +52,7 @@ dev = [
     "deptry",
     "interrogate",
     "poethepoet",
+    "httpx>=0.28.1",
 ]
 
 [tool.ruff]
@@ -84,11 +88,17 @@ show_missing = true
 [tool.vulture]
 paths = ["src"]
 # Framework-registered code vulture cannot see being used: click commands, Flask
-# routes and pydantic validators/serializers are called through their decorators.
+# and FastAPI routes, middleware and exception handlers, and pydantic
+# validators/serializers are called through their decorators.
 ignore_decorators = [
     "@cli.command",
     "@channels.command",
+    "@click.command",
     "@app.route",
+    "@app.get",
+    "@app.post",
+    "@app.middleware",
+    "@app.exception_handler",
     "@field_validator",
     "@field_serializer",
 ]
@@ -109,12 +119,18 @@ ignore_names = [
     "added_at",
     # click passes ctx.obj to @pass_obj commands.
     "obj",
+    # QueueSections fields are read by the review templates.
+    "needs_review",
+    "reviewed",
 ]
 
 [tool.deptry]
 known_first_party = ["happytube"]
-# pyarrow is the parquet engine pandas loads at runtime for DataFrame.to_parquet.
-per_rule_ignores = { DEP002 = ["pyarrow"] }
+# pyarrow is the parquet engine pandas loads at runtime for DataFrame.to_parquet;
+# python-multipart is what FastAPI loads to parse Form() bodies. starlette comes
+# with fastapi (which is built on it): unknown-route 404s raise Starlette's
+# HTTPException, so the error-page handler is registered on that class.
+per_rule_ignores = { DEP002 = ["pyarrow", "python-multipart"], DEP003 = ["starlette"] }
 
 [tool.interrogate]
 fail_under = 0

@@ -1,0 +1,22 @@
+<section class="card" id="reviews">
+  <h2>Reviews <span class="muted">(newest first)</span></h2>
+  {% if reviews %}
+  <ol class="reviews">
+  {% for r in reviews %}
+    <li class="review role-{{ r.role }}">
+      <div class="review-head">
+        <span class="role">{{ r.role }}</span>
+        <strong>{{ r.reviewer }}</strong>
+        <span class="verdict verdict-{{ r.verdict }}">{{ r.verdict }}</span>
+        <span class="muted">{{ r.created_at|dt }}</span>
+      </div>
+      {% if r.notes %}<p class="text">{{ r.notes }}</p>{% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+  {% else %}
+  <p class="empty">No reviews yet.</p>
+  {% endif %}
+  {% include "_review_form.html" %}
+</section>
+{% if oob_status %}{% include "_status_badge.html" %}{% endif %}

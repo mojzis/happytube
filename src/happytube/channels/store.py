@@ -137,15 +137,22 @@ class ChannelEntry:
     def has_human_review(self) -> bool:
         return any(r.role == "human" for r in self.reviews)
 
+    @property
+    def human_review_count(self) -> int:
+        return sum(1 for r in self.reviews if r.role == "human")
+
+    @property
+    def agent_review_count(self) -> int:
+        return len(self.reviews) - self.human_review_count
+
     def summary_dict(self) -> dict[str, Any]:
         """JSON-ready channel fields plus derived status and review counts."""
-        human = sum(1 for r in self.reviews if r.role == "human")
         return {
             **self.channel.model_dump(mode="json"),
             "status": self.status,
             "review_count": len(self.reviews),
-            "human_review_count": human,
-            "agent_review_count": len(self.reviews) - human,
+            "human_review_count": self.human_review_count,
+            "agent_review_count": self.agent_review_count,
             "evidence_at": (
                 self.latest_evidence.model_dump(mode="json")["fetched_at"]
                 if self.latest_evidence

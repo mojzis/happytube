@@ -1,0 +1,20 @@
+<form class="review-form" method="post" action="/channels/{{ channel.slug }}/reviews"
+      hx-post="/channels/{{ channel.slug }}/reviews" hx-target="#reviews" hx-swap="outerHTML">
+  <h3>Your review</h3>
+  <p class="error-message htmx-error" role="alert" hidden></p>
+  {% if error %}<p class="error-message" role="alert">{{ error }}</p>{% endif %}
+  <label>Reviewer
+    <input type="text" name="reviewer" value="{{ form.reviewer }}" required autocomplete="name">
+  </label>
+  <fieldset>
+    <legend>Verdict</legend>
+    {% for v in verdicts %}
+    <label class="choice"><input type="radio" name="verdict" value="{{ v }}"{% if form.verdict == v %} checked{% endif %} required> {{ v }}</label>
+    {% endfor %}
+  </fieldset>
+  <label>Notes (optional)
+    <textarea name="notes" rows="3">{{ form.notes }}</textarea>
+  </label>
+  <button type="submit">Save review</button>
+  <p class="muted">Saved as a human review in the registry; commit and push it yourself.</p>
+</form>

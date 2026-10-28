@@ -5,51 +5,49 @@ _Updated 2026-10-28._
 ## Where we are
 
 - Plan: `docs/plan.md` (phases 0–5 + backlog).
-- Phases 0–3 merged (PRs #6, #7, #9, phase 3 PR). **Phase 3 done** (agent vetting).
-  - `happytube channels vet [SLUG…] [--all] [--force] [--dry-run] [--json]` —
-    Claude Opus 5.5 judges the latest evidence snapshot: identity, calm/happy 1–5 and
-    flags per long-form video (Shorts never scored), channel verdict. Writes
-    `channels/<slug>/vet/<ts>.md` + an agent review (`claude-vet`). Flags
-    `inactive` / `mostly_shorts` / `identity_doubt` turn approve into `unsure`;
-    unresolved and human-rejected channels are skipped; re-vet only on a new
-    snapshot or `--force`. Shared rubric in `happytube/rubric.py` (phase 5 reuses).
-  - Decision 0005. anthropic SDK 0.73 → 1.17.
-  - First real run committed: approve — zoo-praha, cincinnati-zoo, san-diego-zoo,
-    explore-org; unsure — monterey-bay-aquarium, nat-geo-kids,
-    national-park-service, pbs-nature, smithsonian-channel (inactive),
-    zoo-dvur-kralove (inactive); reject — bbc-earth, bbc-earth-kids,
-    national-geographic. ct-decko, zoo-zlin skipped (unresolved). $1.38.
-  - Per-video scores vary run to run near the threshold (zoo-praha 45 vs 39/50).
-  - Tests 212 → 298+, coverage 69% → 75%.
-  - Record: `docs/phases/phase-3/` (log.md, learnings.md).
+- Phases 0–4 merged (PRs #6, #7, #9, #10, phase 4 PR). **Phase 4 done** (web review UI).
+  - `happytube serve [--host 127.0.0.1] [--port 8000] [--channels-dir …]
+    [--reviewer NAME]` — FastAPI + htmx app in `src/happytube/review/`, no keys.
+  - Queue: *Needs human review* first (attention = vet flags or unresolved, then
+    vet verdict unsure → reject → approve → not vetted), then *Reviewed*. Filters
+    status / kind / language (htmx, plain GET works too).
+  - Detail: channel, latest evidence ("resolved to" title prominent), latest vet
+    (summary, concerns, video table with thumbnails, read-only), all reviews.
+  - Review form writes the same `Review` records as `channels review`
+    (`role: human`) via `ChannelStore.add_review`; reviewer name remembered in a
+    cookie, default `--reviewer` / `HAPPYTUBE_REVIEWER`.
+  - Local only, no auth: Host allow-list (DNS rebinding), Origin /
+    Sec-Fetch-Site check on POST, wildcard binds refused, htmx 2.0.11 vendored.
+  - Decision 0007. Tests 298 → 398+, coverage 75% → 78%. Browser-checked by QA.
+  - Record: `docs/phases/phase-4/` (log.md, learnings.md).
 - Process lessons: `docs/process-learnings.md`.
 
 ## Next step
 
-1. **User (content, deferred):** human reviews. `channels list --needs-human-review`,
-   `channels show <slug>` (now with the vet summary), read `vet/*.md`, then
-   `channels review <slug> --reviewer matous --role human --verdict …`. Open
-   questions still: ct-decko, zoo-zlin handles; national-park-service (vet says
-   identity yes, content mostly panels); zoo-dvur-kralove / smithsonian inactive.
-2. Start **phase 4 — web review UI**: write `docs/phases/phase-4/context.md`
-   (FastAPI + htmx + Jinja2, decision 0006 — the user's standard stack: channel
-   queue ordered by needs-review / agent flags first, channel detail with evidence +
-   vet report + all reviews, approve/reject/notes form posting via htmx and writing
-   the same review records via `ChannelStore`; video review queue from vet scores?).
-   Then run the loop.
+1. **User (content):** human reviews, now in the browser:
+   `uv run happytube serve --reviewer matous` → http://127.0.0.1:8000. Work the
+   *Needs human review* section. Then commit + push `channels/` (the app doesn't run
+   git). Open questions: ct-decko, zoo-zlin handles; national-park-service (identity
+   yes, content mostly panels); zoo-dvur-kralove / smithsonian inactive.
+2. Start **phase 5 — trusted fetch**: write `docs/phases/phase-5/context.md`.
+   Scope from plan: fetch only from approved channels (playlistItems, decision 0004),
+   skip Shorts, assess with the shared rubric, fetch fails loudly, player/export read
+   `stages/`, Flask player → FastAPI app (drop `flask`), video review queue + video
+   review records in the review UI. Likely too big for one phase: split first.
 
-## Open decisions (settle in phase 4 context.md)
+## Open decisions (settle in phase 5 context.md)
 
-- Reviewer identity in the web UI: fixed name from config, or a field per review?
-- Video review queue in phase 4, or only channels (videos in phase 5)?
-- Local-only FastAPI (no auth, `uvicorn` on 127.0.0.1) vs anything deployable.
-- Where the app lives (`happytube/review/` vs `web/`) and the CLI entry
-  (`happytube serve`?).
+- Split phase 5? (e.g. 5a trusted fetch + assess with rubric; 5b video review queue;
+  5c player port to FastAPI.)
+- Video review record format and where it lives (per channel `videos/<id>/reviews/`
+  vs a top-level `videos/`).
+- Does a video need a human approval, or is an approved channel + suitable score
+  enough (vet scores vary run to run)?
+- Replace legacy assess (happiness 1–5) with the rubric, or keep both for now?
 
 ## Decided
 
 - Runner: manual; the user drives the loop from the session.
-- Registry layout (0003); evidence (0004); agent vetting (0005): snapshot-only input,
-  report + agent review + per-video scores, skip-when-current, Opus 5.5.
-- Web stack: FastAPI + htmx (0006); Flask player ported in phase 5.
+- Registry layout (0003); evidence (0004); agent vetting (0005); web stack FastAPI +
+  htmx (0006); review UI local-only, channels only, reviewer cookie (0007).
 - Merge PRs with a merge commit (full history), not squash.

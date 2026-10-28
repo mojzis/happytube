@@ -75,8 +75,7 @@ def _store_errors_as_click(f: Callable) -> Callable:
     return wrapper
 
 
-@click.group()
-@click.option(
+channels_dir_option = click.option(
     "--channels-dir",
     type=click.Path(file_okay=False, path_type=Path),
     envvar="HAPPYTUBE_CHANNELS_DIR",
@@ -84,6 +83,10 @@ def _store_errors_as_click(f: Callable) -> Callable:
     show_default="channels/ at repo root",
     help="Registry directory (env: HAPPYTUBE_CHANNELS_DIR).",
 )
+
+
+@click.group()
+@channels_dir_option
 @click.pass_context
 def channels(ctx: click.Context, channels_dir: Path) -> None:
     """Trusted-channel registry: add candidates, list, show and review them."""
