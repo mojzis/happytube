@@ -5,7 +5,7 @@ import unicodedata
 from datetime import UTC, datetime
 from typing import Literal, get_args
 
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 Kind = Literal["broadcaster", "zoo", "aquarium", "park", "museum", "other"]
 Language = Literal["cs", "en"]
@@ -44,7 +44,10 @@ class Channel(BaseModel):
     """A YouTube channel in the registry (``channels/<slug>/channel.yaml``).
 
     Status is not stored here: it is derived from the channel's review records.
+    Unknown keys are refused so that a typo in a hand-edited file surfaces.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     slug: str = Field(pattern=SLUG_PATTERN)
     name: str = Field(min_length=1)
@@ -74,6 +77,8 @@ class Channel(BaseModel):
 
 class Review(BaseModel):
     """One review of a channel by a human or an agent (append-only file)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     reviewer: str = Field(min_length=1)
     role: Role
