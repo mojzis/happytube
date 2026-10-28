@@ -24,24 +24,20 @@ _Updated 2026-10-28._
 
 ## Next step
 
-1. **User (content):** human reviews, now in the browser:
-   `uv run happytube serve --reviewer mojzis` → http://127.0.0.1:8000. Work the
-   *Needs human review* section. Then commit + push `channels/` (the app doesn't run
-   git). Open questions: ct-decko, zoo-zlin handles; national-park-service (identity
-   yes, content mostly panels); zoo-dvur-kralove / smithsonian inactive.
-2. Start **phase 5 — trusted fetch**: write `docs/phases/phase-5/context.md`.
-   Scope from plan: fetch only from approved channels (playlistItems, decision 0004),
-   skip Shorts, assess with the shared rubric, fetch fails loudly, player/export read
-   `stages/`, Flask player → FastAPI app (drop `flask`), video review queue + video
-   review records in the review UI. Likely too big for one phase: split first.
+1. **Run phase 5a** from `docs/phases/phase-5a/context.md` (branch
+   `phase-5a-trusted-fetch`): dev → review ‖ QA → fix → verify → learnings → PR.
+   Dev's real run uses YTKEY (~35 units) and ≤ ~$1 of Anthropic credit.
+2. Then 5b (player on `stages/trusted/`, Flask → FastAPI), then 5c (video
+   spot-checks).
+3. **User (content), any time:** ct-decko, zoo-zlin still candidates (handles
+   unresolved). Human reviews round 2 pushed (`e97b73f`); national-park-service's
+   approve is by "QA Tester" (kept on purpose).
 
-## Open decisions (settle in phase 5 context.md)
+## Open decisions
 
-- Split phase 5? (e.g. 5a trusted fetch + assess with rubric; 5b video review queue;
-  5c player port to FastAPI.)
-- Video review record format and where it lives (per channel `videos/<id>/reviews/`
-  vs a top-level `videos/`).
-- Replace legacy assess (happiness 1–5) with the rubric, or keep both for now?
+- 5c: video review record format and location (per channel
+  `channels/<slug>/videos/<id>/reviews/` vs top-level `videos/`).
+- When to retire the legacy pipeline (search fetch, happiness assess).
 
 ## Decided
 
@@ -51,4 +47,6 @@ _Updated 2026-10-28._
 - Channel approval = source; agents gate each video with the rubric; humans only
   spot-check videos to test the algorithm (0008). Vet prompt changed: old vets
   are stale (`channels vet --all --force` to refresh, costs credit).
+- Phase 5 split 5a/5b/5c; trusted pipeline side by side with legacy; assess
+  with Opus 5.5; enhance only `suitable` (2026-10-28, → decision 0009 in 5a).
 - Merge PRs with a merge commit (full history), not squash.
