@@ -14,7 +14,7 @@ Then the existing pipeline fetches only from approved channels.
 - **Single source of truth: git-tracked files** (YAML/markdown) — channels, evidence,
   review records. No database.
 - **Agents** work through the CLI (`happytube channels …`, JSON output).
-- **Humans** work through a web review page (extend the Flask app).
+- **Humans** work through a web review page (FastAPI + htmx, decision 0006).
 - Both write the **same review records**: who (user / agent name), verdict, notes, when.
 - Nothing enters the allowlist without a human approval.
 - Calm matters as much as happy: no war, disasters, violence, predators hunting, sad
@@ -29,8 +29,8 @@ Then the existing pipeline fetches only from approved channels.
 | 1 ✅ | Channel registry | Data model + files for channels (`candidate` / `approved` / `rejected`, kind, language, ids) and review records (reviewer, role human/agent, verdict, notes, timestamp). CLI: `channels add / list / show / review` with `--json`. Seed with the starter candidates from the idea doc. |
 | 2 ✅ | Channel evidence | Resolve handles → channel ids (`channels.list`), collect stats + recent uploads (RSS and/or `playlistItems`), video durations; cached per channel. Research note + decision record comparing fetch methods with quota math for 50/200/500 channels. |
 | 3 ✅ | Agent vetting | Claude vets a channel from its evidence with the calm/happy rubric → markdown vet report + an agent review record. Video-level assessment reuses the same rubric. CLI: `channels vet <id>`. |
-| 4 | Web review UI | Flask pages: channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records; video review queue. |
-| 5 | Trusted fetch | Fetch stage pulls new videos only from approved channels (method from phase 2's decision), skips Shorts, feeds assess/enhance/report/player. Also: fetch must fail loudly on network/parse errors (today a catch-all exits 0); web player/export read `stages/` instead of legacy `data/fetched/`. |
+| 4 | Web review UI | FastAPI + htmx app (decision 0006): Jinja2 pages over `ChannelStore` — channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records; video review queue. |
+| 5 | Trusted fetch | Fetch stage pulls new videos only from approved channels (method from phase 2's decision), skips Shorts, feeds assess/enhance/report/player. Also: fetch must fail loudly on network/parse errors (today a catch-all exits 0); web player/export read `stages/` instead of legacy `data/fetched/`; the player moves from Flask to the FastAPI app and `flask` is dropped. |
 
 Later (not scheduled): discovery from directories (EAZA/AZA, park services, museums),
 featured-channel one-hop expansion, blocklist, per-person channel lists / distribution.

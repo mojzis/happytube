@@ -40,7 +40,8 @@ Current (`src/happytube/`):
 
 Planned:
 
-- **Web review UI** — channel queue, detail and approve/reject form in the Flask app.
+- **Web review UI** — channel queue, detail and approve/reject form in a FastAPI +
+  htmx app (decision 0006); the Flask player moves there in phase 5.
 
 ## Data
 

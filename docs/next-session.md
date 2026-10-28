@@ -32,8 +32,9 @@ _Updated 2026-10-28._
    questions still: ct-decko, zoo-zlin handles; national-park-service (vet says
    identity yes, content mostly panels); zoo-dvur-kralove / smithsonian inactive.
 2. Start **phase 4 — web review UI**: write `docs/phases/phase-4/context.md`
-   (Flask pages: channel queue ordered by needs-review / agent flags first, channel
-   detail with evidence + vet report + all reviews, approve/reject/notes form writing
+   (FastAPI + htmx + Jinja2, decision 0006 — the user's standard stack: channel
+   queue ordered by needs-review / agent flags first, channel detail with evidence +
+   vet report + all reviews, approve/reject/notes form posting via htmx and writing
    the same review records via `ChannelStore`; video review queue from vet scores?).
    Then run the loop.
 
@@ -41,11 +42,14 @@ _Updated 2026-10-28._
 
 - Reviewer identity in the web UI: fixed name from config, or a field per review?
 - Video review queue in phase 4, or only channels (videos in phase 5)?
-- Local-only Flask (no auth) vs anything deployable.
+- Local-only FastAPI (no auth, `uvicorn` on 127.0.0.1) vs anything deployable.
+- Where the app lives (`happytube/review/` vs `web/`) and the CLI entry
+  (`happytube serve`?).
 
 ## Decided
 
 - Runner: manual; the user drives the loop from the session.
 - Registry layout (0003); evidence (0004); agent vetting (0005): snapshot-only input,
   report + agent review + per-video scores, skip-when-current, Opus 5.5.
+- Web stack: FastAPI + htmx (0006); Flask player ported in phase 5.
 - Merge PRs with a merge commit (full history), not squash.
