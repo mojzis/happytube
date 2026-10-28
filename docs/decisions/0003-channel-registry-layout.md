@@ -24,11 +24,16 @@ concrete layout, the channel and review fields, and a rule for a channel's statu
   (`approve|reject|unsure`), `notes`, `created_at` (UTC ISO).
 - **Status is derived, not stored** — the latest human review with verdict `approve`
   or `reject` decides (`approved` / `rejected`); otherwise the channel is a
-  `candidate`. Agent reviews never change status.
+  `candidate`. Agent reviews never change status. "Latest" is by `created_at`; on a
+  tie the later-written file wins (base name before `-2`, `-3`…).
 - **Blocklist** — no separate list: a `rejected` channel is the blocklist entry.
 - **Slug** — kebab-case ASCII of the name (diacritics stripped) or given explicitly.
   Adding a channel fails if the slug, `channel_id` or handle (case-insensitive) is
-  already registered.
+  already registered. The slug in `channel.yaml` must equal its directory name, and
+  a slug never becomes a path unless it matches the slug pattern.
+- **Files are validated strictly** — unknown keys, bad values and malformed YAML are
+  errors that name the file. A broken file fails `list` and `add` (whose duplicate
+  check reads every channel) until it is fixed; it is never silently skipped.
 - Code: `happytube.channels` (`models.py`, `store.py`); `happytube channels` CLI is a
   thin layer over the store, and the phase 4 web UI will use the same store.
 
