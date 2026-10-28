@@ -1,7 +1,8 @@
 """``happytube channels`` — manage the trusted-channel registry.
 
-No command here needs API keys. With ``--json`` the result goes to stdout as plain
-JSON (no rich markup); errors go to stderr with a non-zero exit code.
+Only ``resolve`` and ``evidence`` call the YouTube API (they need ``YTKEY``); the
+rest need no keys. With ``--json`` the result goes to stdout as plain JSON (no rich
+markup); errors go to stderr with a non-zero exit code.
 """
 
 import json
@@ -16,6 +17,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from happytube.channels.collect import Run, collect_evidence, resolve_channels
 from happytube.channels.models import (
     KINDS,
     LANGUAGES,
@@ -32,7 +34,9 @@ from happytube.channels.store import (
     ChannelStoreError,
     filter_entries,
 )
+from happytube.config.settings import YouTubeSettings
 from happytube.paths import PROJECT_ROOT
+from happytube.youtube import YouTubeClient
 
 console = Console()
 
@@ -177,7 +181,7 @@ def list_channels(  # noqa: PLR0913 - one parameter per CLI option
 def _print_table(entries: list[ChannelEntry]) -> None:
     table = Table(title=f"Channels ({len(entries)})")
     table.add_column("Slug", no_wrap=True)  # copied into show/review, keep whole
-    for column in ("Name", "Kind", "Lang", "Status", "Reviews (h/a)"):
+    for column in ("Name", "Kind", "Lang", "Status", "Reviews (h/a)", "Evidence"):
         table.add_column(column)
     for e in entries:
         s = e.summary_dict()
@@ -188,6 +192,7 @@ def _print_table(entries: list[ChannelEntry]) -> None:
             ",".join(s["languages"]),
             s["status"],
             f"{s['human_review_count']}/{s['agent_review_count']}",
+            (s["evidence_at"] or "-")[:10],
         )
     console.print(table)
 
@@ -204,6 +209,7 @@ def show_channel(store: ChannelStore, slug: str, as_json: bool) -> None:
         _echo_json(detail)
         return
     reviews = detail.pop("reviews")
+    evidence = detail.pop("evidence")
     for key, value in detail.items():
         if value is not None:
             shown = ", ".join(value) if isinstance(value, list) else value
@@ -216,6 +222,31 @@ def show_channel(store: ChannelStore, slug: str, as_json: bool) -> None:
             highlight=False,
             markup=False,
         )
+    _print_evidence(evidence)
+
+
+def _print_evidence(evidence: dict[str, Any] | None, recent: int = 5) -> None:
+    if evidence is None:
+        console.print("\n[bold]evidence[/bold]: none yet (run channels evidence)")
+        return
+    videos = evidence["videos"]
+    lines = [
+        f"fetched_at: {evidence['fetched_at']}",
+        f"resolved to: {evidence['title']} ({evidence['custom_url'] or '-'}, "
+        f"{evidence['channel_id']})",
+        f"subscribers: {evidence['subscriber_count'] or 'hidden'}, "
+        f"videos on channel: {evidence['video_count']}",
+        f"recent uploads stored: {len(videos)}, shorts: {evidence['shorts_count']}",
+    ]
+    lines += [
+        f"  {v['published_at'][:10]}  {v['duration_s']}s"
+        + (" short" if v["is_short"] else "")
+        + f"  {v['title']}"
+        for v in videos[:recent]
+    ]
+    console.print("\n[bold]evidence[/bold] (latest; full list with --json)")
+    for line in lines:
+        console.print(f"  {line}", highlight=False, markup=False)
 
 
 @channels.command("review")
@@ -253,3 +284,103 @@ def review_channel(  # noqa: PLR0913 - one parameter per CLI option
         )
     else:
         click.echo(f"{slug}: {status}")
+
+
+def make_youtube_client() -> YouTubeClient:
+    """Client with ``YTKEY`` from the environment or ``.env``; clean error if unset."""
+    try:
+        settings = YouTubeSettings()
+    except ValidationError as e:
+        msg = "YTKEY is not set (environment or .env); it is needed to call YouTube"
+        raise click.ClickException(msg) from e
+    return YouTubeClient(settings.youtube_api_key)
+
+
+def _select_slugs(store: ChannelStore, slugs: tuple[str, ...], all_: bool) -> list[str]:
+    """Slugs to process, each checked to exist before any quota is spent."""
+    if all_ == bool(slugs):
+        msg = "Give one or more SLUGs or --all (not both)"
+        raise click.UsageError(msg)
+    selected = store.slugs() if all_ else list(dict.fromkeys(slugs))
+    for slug in selected:
+        store.get_channel(slug)  # raises ChannelNotFoundError / broken file
+    return selected
+
+
+def _report(run: Run, as_json: bool) -> None:
+    """Print a run, then exit 1 (message on stderr) if anything failed."""
+    if as_json:
+        _echo_json(run.as_dict())
+    else:
+        for r in run.results:
+            detail = r.path or r.channel_id or ""
+            if r.video_count is not None:
+                detail += f" ({r.video_count} videos, {r.shorts_count} shorts)"
+            if r.message:
+                detail += f" — {r.message}" if detail else r.message
+            console.print(
+                f"{r.slug}: {r.status} {detail}".rstrip(),
+                highlight=False,
+                markup=False,
+                soft_wrap=True,
+            )
+        console.print(f"quota units used: {run.quota_units}", highlight=False)
+    if run.aborted:
+        msg = f"Stopped early: {run.aborted}"
+        raise click.ClickException(msg)
+    if run.failed:
+        msg = "Some channels failed; see the report above"
+        raise click.ClickException(msg)
+
+
+slug_args = click.argument("slugs", nargs=-1)
+all_option = click.option(
+    "--all", "all_", is_flag=True, help="Every channel in the registry."
+)
+
+
+@channels.command("resolve")
+@slug_args
+@all_option
+@json_option
+@click.pass_obj
+@_store_errors_as_click
+def resolve_command(
+    store: ChannelStore, slugs: tuple[str, ...], all_: bool, as_json: bool
+) -> None:
+    """Resolve handles to channel ids via YouTube (1 quota unit per handle).
+
+    Fills a missing channel_id in channel.yaml; a set one is verified and never
+    overwritten. not_found / no_handle are reported, not failures.
+    """
+    selected = _select_slugs(store, slugs, all_)
+    _report(resolve_channels(store, make_youtube_client(), selected), as_json)
+
+
+@channels.command("evidence")
+@slug_args
+@all_option
+@click.option(
+    "--max-videos",
+    type=click.IntRange(min=1),
+    default=50,
+    show_default=True,
+    help="Recent uploads per channel (50 per quota unit).",
+)
+@json_option
+@click.pass_obj
+@_store_errors_as_click
+def evidence_command(
+    store: ChannelStore,
+    slugs: tuple[str, ...],
+    all_: bool,
+    max_videos: int,
+    as_json: bool,
+) -> None:
+    """Fetch stats and recent uploads; write one evidence snapshot per channel.
+
+    Resolves missing channel ids first. Snapshots are append-only.
+    """
+    selected = _select_slugs(store, slugs, all_)
+    run = collect_evidence(store, make_youtube_client(), selected, max_videos)
+    _report(run, as_json)
