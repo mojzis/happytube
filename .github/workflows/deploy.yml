@@ -10,10 +10,7 @@ on:
     paths:
       - "stages/trusted/**"
       - "channels/**"
-      - "src/happytube/web/**"
-      - "src/happytube/trusted/**"
-      - "src/happytube/channels/**"
-      - "src/happytube/models/**"
+      - "src/happytube/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/deploy.yml"

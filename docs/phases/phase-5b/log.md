@@ -59,3 +59,17 @@ Orchestrator (user request): enabled GitHub Pages via `gh api -X POST repos/mojz
 - all must/also-fix done (Q1, R2, R3, R1, R4, Q4, R5, Q5, logs/ ignore, stale block).
 - deviations: compact names like `20261028` now warned + skipped (were read as
   dates; closes 5a V2); route warning once per app instance.
+
+## Orchestrator probe (final code, dev's real scratch data, no paid calls)
+Copy of `/tmp/claude-1000/p5b-real` minus the test reject. Export: 7 videos.
+`serve` → `/player/videos.json` 7 records newest first (explore-org 3,
+cincinnati-zoo 4): bears hibernating, giraffe cam, vet techs, polar bears, belugas;
+descriptions clean. HEAD 200 no-store. Repo tree clean after export (videos.json
+ignored).
+
+## 4 — verify (verdict: ship)
+All R/Q ids resolved, re-traced end to end (stub uv + bare remote for daily_run).
+Q5 deviation breaks nothing; closes 5a V2. 498 / 85%, poe check green.
+- V1 info: deploy paths miss stages/base.py, paths.py, rubric.py, claude.py →
+  orchestrator widened to `src/happytube/**`.
+- V2 info: no upstream → pushing run exits 1 (loud, documented).
