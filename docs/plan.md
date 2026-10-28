@@ -25,12 +25,12 @@ Then the existing pipeline fetches only from approved channels.
 
 | # | Title | Deliverable |
 | --- | --- | --- |
-| 0 | Template alignment | Repo matches `~/git/python-template` (src layout, uv dev group, ruff/ty, poe tasks, madoqua hook, aesop toolbox, dependabot); legacy modules deleted; `docs/` scaffold from ideas repo template with decision 0001 = trusted channels. |
+| 0 ✅ | Template alignment | Repo matches `~/git/python-template` (src layout, uv dev group, ruff/ty, poe tasks, madoqua hook, aesop toolbox, dependabot); legacy modules deleted; `docs/` scaffold from ideas repo template with decision 0001 = trusted channels. |
 | 1 | Channel registry | Data model + files for channels (`candidate` / `approved` / `rejected`, kind, language, ids) and review records (reviewer, role human/agent, verdict, notes, timestamp). CLI: `channels add / list / show / review` with `--json`. Seed with the starter candidates from the idea doc. |
 | 2 | Channel evidence | Resolve handles → channel ids (`channels.list`), collect stats + recent uploads (RSS and/or `playlistItems`), video durations; cached per channel. Research note + decision record comparing fetch methods with quota math for 50/200/500 channels. |
 | 3 | Agent vetting | Claude vets a channel from its evidence with the calm/happy rubric → markdown vet report + an agent review record. Video-level assessment reuses the same rubric. CLI: `channels vet <id>`. |
 | 4 | Web review UI | Flask pages: channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records; video review queue. |
-| 5 | Trusted fetch | Fetch stage pulls new videos only from approved channels (method from phase 2's decision), skips Shorts, feeds assess/enhance/report/player unchanged. |
+| 5 | Trusted fetch | Fetch stage pulls new videos only from approved channels (method from phase 2's decision), skips Shorts, feeds assess/enhance/report/player. Also: fetch must fail loudly on network/parse errors (today a catch-all exits 0); web player/export read `stages/` instead of legacy `data/fetched/`. |
 
 Later (not scheduled): discovery from directories (EAZA/AZA, park services, museums),
 featured-channel one-hop expansion, blocklist, per-person channel lists / distribution.
@@ -52,3 +52,13 @@ feed its design. Until then the orchestrating session runs:
 Working files per phase live in `docs/phases/phase-N/` (`context.md`, step briefs,
 `log.md` with verbatim agent reports, `learnings.md`). Each phase runs on its own
 branch; merge/PR only after the user says so.
+
+## Backlog (from phase 0, not scheduled)
+
+- `report` requires API keys although it calls no API.
+- runpy RuntimeWarning on `python -m happytube.web.*` (web/__init__ imports server).
+- 8 real dead-code hits (`uv run poe dead-code`): delete or use.
+- Test nits: quota error fixture shape (`error.errors[0].reason`), `test_today_local`
+  still pins the implementation, duplicated CLI test setup.
+- Coverage 45% (web/ and stages largely untested).
+- Paths are relative to cwd; add a `data_root` setting.

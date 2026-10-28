@@ -32,3 +32,10 @@ Do NOT modify tracked files or commit on the branch. Restore anything a command 
 ## Report
 Return ONLY JSON (≤500 words):
 {"verified": true, "checks": [{"step": 1, "ok": true, "evidence": ""}], "issues": [""]}
+
+## Added by orchestrator after dev
+13. Render the HTML report from a small fake enhance-stage fixture (in a temp dir,
+    e.g. via the ReportStage API or `happytube report` with a temp stages dir if
+    configurable) and check autoescape didn't break the page (no literal `&lt;div`).
+14. CLI commands still print user-facing output to the terminal (dev replaced print
+    with logging) — e.g. `happytube status` shows something readable at default level.

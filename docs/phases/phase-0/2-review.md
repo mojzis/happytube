@@ -26,3 +26,13 @@ Read-only. Do NOT edit or commit.
 Return ONLY JSON (≤500 words):
 {"findings": [{"severity": "high|medium|low", "file": "", "issue": "", "fix": ""}],
  "preexisting": [""], "verdict": "ship|fix-first"}
+
+## Dev deviations to cover (added by orchestrator)
+- Runtime-affecting lint fixes: Jinja autoescape on the HTML report (does the report
+  template now double-escape or break intentionally-HTML content?), requests timeout,
+  print→logging (CLI user-facing output lost?), local-tz dates, date.fromisoformat,
+  server reusing export.extract_video_info, new `src/happytube/paths.py`.
+- Test refactors for zorilla — did they weaken any assertion?
+- Known unresolved (judge severity, propose fix): web/export read `data/fetched/`
+  (no producer left); `videos.py` YTKEY never set (Search/Videos skip
+  YtQuery.__post_init__); 21 vulns (would `uv lock --upgrade` be safe?).
