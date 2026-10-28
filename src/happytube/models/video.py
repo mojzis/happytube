@@ -5,11 +5,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-from pydantic import BaseModel, Field
+import yaml
+from pydantic import BaseModel, Field, ValidationError
 
 from happytube.models.markdown import MarkdownFile
+from happytube.utils import today_local
 
 logger = logging.getLogger(__name__)
+
+MIN_HAPPINESS = 1
+MAX_HAPPINESS = 5
 
 
 class Video(BaseModel):
@@ -35,7 +40,10 @@ class Video(BaseModel):
 
     # Assessment fields (populated during assess stage)
     happiness_score: int | None = Field(
-        None, ge=1, le=5, description="Happiness score (1-5)"
+        None,
+        ge=MIN_HAPPINESS,
+        le=MAX_HAPPINESS,
+        description="Happiness score (1-5)",
     )
     happiness_reasoning: str | None = Field(
         None, description="Reasoning for happiness score"
@@ -81,7 +89,7 @@ class Video(BaseModel):
             DataFrame containing all videos from the specified stage and date range
         """
         base_path = Path("stages") / stage_name
-        end_date = datetime.now().astimezone().date()
+        end_date = today_local()
         start_date = end_date - timedelta(days=days_back - 1)
 
         all_videos = []
@@ -95,8 +103,8 @@ class Video(BaseModel):
                         md_file = MarkdownFile.load(md_file_path)
                         video = cls.from_frontmatter(md_file.frontmatter)
                         all_videos.append(video.to_pandas_dict())
-                    except Exception:
-                        logger.debug("Skipping unparsable %s", md_file_path)
+                    except (ValidationError, yaml.YAMLError, OSError) as e:
+                        logger.warning("Skipping unparsable %s: %s", md_file_path, e)
             current_date += timedelta(days=1)
 
         return pd.DataFrame(all_videos) if all_videos else pd.DataFrame()
