@@ -121,3 +121,95 @@ doc fix). Loop run: dev → review ‖ QA → fix → combined verify → orches
   record the plan and the learnings record deviations?
 - Is a dedicated QA agent worth it for a small, pure-logic phase, or should
   combined review+QA run in round 1 too?
+
+## Phase 2 (2026-10-28)
+
+Source: `docs/phases/phase-2/` (channel evidence, real YouTube API, 4 agent steps +
+1 orchestrator data commit). Loop run: dev → review ‖ QA (QA runtime-only) → fix →
+combined verify, as planned.
+
+### Loop design
+- **Real external calls belong in the loop.** The dev step's real run found what no
+  mock could: a wrong settled rule (Shorts ≤180 s) and a look-alike channel that
+  resolved "successfully". For phases that touch an external system, keep a real
+  run in dev, even if only as research.
+- **Dev's real-run data should not be committed before review.** Dev committed
+  snapshots computed by a rule the next step overturned. Append-only data then stays
+  wrong until a re-run. Better: dev's real run is exploratory. The committed run
+  comes after the fix, or after verify.
+- **Plan for a blocked real re-run.** The fix step's re-run was blocked by a bad
+  credential, and the phase shipped without it. The learnings and next-session must
+  carry the re-run as an explicit pending step.
+- Confirms phase 1: combined verify as round 2 was enough (9/9 resolved, 6 low,
+  `ship`). Asking verify to judge the fix's deviations found V2 again.
+- Confirms phase 0's exit rule: one fix round, stop at `ship`, defer lows.
+
+### Briefs & context
+- **Settled decisions about external behaviour are hypotheses.** context.md settled
+  the Shorts rule from general knowledge. The "flag it in deviations, don't silently
+  switch" clause turned the wrong rule into a one-round fix, not a silent change or a
+  redesign loop. Keep that clause in every context that settles external facts.
+  Cheaper still: one research spike before settling.
+- **Every brief with real credentials must say what to do when they fail.** "Stop
+  and report" is the rule. The dev brief didn't say it, and dev truncated the key in
+  a scratch wrapper. The fix brief said it, and the fix agent stopped after 1 unit.
+- **Add a 1-call credential probe before a batch run.** The batch run spent 15
+  calls on a bad key before the early stop existed.
+- **Phase 1's "don't send the same orchestrator-added question to both" was not
+  applied.** Four added questions went into both review and QA briefs, and both
+  answered them. Without them, QA's runtime-only base checks had almost no overlap
+  with review. Route each added question to one agent: logic → review,
+  data/runtime → QA.
+- Human-judgement questions found during a phase (identity, activity, unknown
+  handles) go into the product's own data where it has a place for them (here:
+  agent `unsure` reviews). That beats a doc note: the tool surfaces them.
+
+### Agent reports
+- **`deviations` must include unauthorized workarounds, and the orchestrator must
+  rule on them.** Dev reported the key truncation honestly. The orchestrator then
+  asked review and QA to confirm nothing landed, and the fix brief forbade a repeat.
+  Keep this three-step response.
+- QA found an undeclared deviation (Q3: `resolve` re-verified resolved channels,
+  costing units). Review missed it. Runtime checks with a cost counter catch
+  behaviour that reads fine in code.
+- Ask dev for a cost ledger when calls cost money or quota. Dev's report split units
+  by purpose (resolve, evidence, rerun, probes), which made the overspend visible.
+
+### Tooling gotchas
+- **The staged-only `ty` hook does not catch cross-file type breakage.** A commit that
+  changes a type in one file (settings → `SecretStr`) passes while an unstaged
+  caller breaks. Run `uv run poe typecheck` before each commit of a multi-commit fix,
+  or squash-merge.
+- **Secret grep**: plain `git grep AIza` hits the briefs that mention the pattern.
+  Use a key-shaped regex (`AIza[0-9A-Za-z_-]{20,}`) over trees and `git log -p`.
+- Tests that build `Settings` read `.env` relative to cwd. Once a real `.env` exists,
+  "missing credentials" tests must `chdir(tmp_path)`.
+- An identity check like `forHandle` returning an id is not proof of identity.
+  Store human-checkable fields (title, custom_url, subscribers) in the snapshot and
+  look at them.
+
+### Answers to earlier open questions
+- *Is a dedicated QA agent worth it for a small phase?* (phase 1) For a phase with
+  external I/O, yes. Runtime-only QA found Q3, the pre-2024 Shorts rule and the
+  inactive channel, and gave the positive evidence on key safety. For a pure-logic
+  phase it is still open.
+- *Should the log.md header record the plan or the loop run?* (phase 1) Labelling it
+  "Loop (planned)" worked. Learnings record deviations from it.
+- *Where does the deferred backlog live?* (phase 0) Code items: `docs/plan.md`
+  backlog section plus phase learnings. Human content questions: the registry
+  itself (agent reviews).
+- *Who decides promotion of `preexisting` → fix?* (phase 0) The orchestrator alone
+  promoted the `videos.py` key leak (security, minimal change), and it was fine.
+  Non-security preexisting items stayed deferred.
+- *Should QA include an end-to-end failure-path check per fix?* (phase 0) Yes. QA's
+  quota-mid-run check found Q2, which matched review's R1.
+
+### Open questions (new)
+- Should dev commit real-run data at all, or only report it, with the committed run
+  after verify?
+- Who fixes a bad credential: always the user, or may the orchestrator ask the user
+  for permission to work around it? The rule today: user only.
+- Should the orchestrator itself eyeball real-data output (titles, counts) after
+  dev, or is that a QA check by default?
+- Should multi-commit fix steps run full `poe typecheck` per commit, or is
+  squash-merge the accepted answer to broken intermediates?
