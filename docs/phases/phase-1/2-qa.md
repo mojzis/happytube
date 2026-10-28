@@ -35,3 +35,9 @@ Don't modify tracked files or commit on the branch.
 Return ONLY JSON (≤500 words), number issues Q1, Q2…:
 {"verified": true, "checks": [{"step": 1, "ok": true, "evidence": ""}],
  "issues": [{"id": "Q1", "issue": ""}]}
+
+## Added by orchestrator after dev
+10. Hand-edit tolerance in a temp dir: delete `url: null` from a channel.yaml, add an
+    unknown key, change `slug` to differ from dir name → what do list/show do?
+11. Two reviews written with identical `created_at` (craft files by hand) → which
+    one `show` lists last and which decides status.

@@ -30,3 +30,11 @@ Read-only. Do NOT edit or commit on the branch.
 Return ONLY JSON (≤500 words):
 {"findings": [{"id": "R1", "severity": "high|medium|low", "file": "", "issue": "", "fix": ""}],
  "preexisting": [""], "verdict": "ship|fix-first"}
+
+## Dev deviations to cover (added by orchestrator)
+- Tie-break: dev says identical `created_at` sorts `-2` before the base filename
+  (wrong order). Real risk? Propose a robust ordering (e.g. parse suffix numerically).
+- Hand-edited `channel.yaml` (null optional fields kept): does load tolerate a human
+  deleting a null key, adding unknown keys, or editing `slug` so it no longer matches
+  the directory name?
+- vulture ignores (`added_at`, `obj`, decorators): narrow enough?

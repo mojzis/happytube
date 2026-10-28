@@ -25,7 +25,10 @@ concrete layout, the channel and review fields, and a rule for a channel's statu
 - **Status is derived, not stored** — the latest human review with verdict `approve`
   or `reject` decides (`approved` / `rejected`); otherwise the channel is a
   `candidate`. Agent reviews never change status. "Latest" is by `created_at`; on a
-  tie the later-written file wins (base name before `-2`, `-3`…).
+  tie the collision suffix decides (base name before `-2`, `-3`…), so within one
+  reviewer the later-written file wins. A tie between different reviewers is
+  decided by filename and is arbitrary — real timestamps have microseconds, so this
+  only happens with hand-written files.
 - **Blocklist** — no separate list: a `rejected` channel is the blocklist entry.
 - **Slug** — kebab-case ASCII of the name (diacritics stripped) or given explicitly.
   Adding a channel fails if the slug, `channel_id` or handle (case-insensitive) is
