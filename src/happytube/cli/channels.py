@@ -26,7 +26,12 @@ from happytube.channels.models import (
     Review,
     slugify,
 )
-from happytube.channels.store import ChannelEntry, ChannelStore, ChannelStoreError
+from happytube.channels.store import (
+    ChannelEntry,
+    ChannelStore,
+    ChannelStoreError,
+    filter_entries,
+)
 from happytube.paths import PROJECT_ROOT
 
 console = Console()
@@ -41,7 +46,11 @@ def _echo_json(data: Any) -> None:
 
 
 def _store_errors_as_click(f: Callable) -> Callable:
-    """Turn store and validation errors into a clean stderr message and exit 1."""
+    """Turn store and input-validation errors into a clean stderr message, exit 1.
+
+    Problems in files on disk arrive as ``ChannelStoreError`` naming the file; a
+    ``ValidationError`` here comes from command-line input.
+    """
 
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -66,7 +75,7 @@ def _store_errors_as_click(f: Callable) -> Callable:
     type=click.Path(file_okay=False, path_type=Path),
     envvar="HAPPYTUBE_CHANNELS_DIR",
     default=PROJECT_ROOT / "channels",
-    show_default=True,
+    show_default="channels/ at repo root",
     help="Registry directory (env: HAPPYTUBE_CHANNELS_DIR).",
 )
 @click.pass_context
@@ -152,14 +161,13 @@ def list_channels(  # noqa: PLR0913 - one parameter per CLI option
     as_json: bool,
 ) -> None:
     """List registered channels with their derived status."""
-    entries = [
-        e
-        for e in store.entries()
-        if (status is None or e.status == status)
-        and (kind is None or e.channel.kind == kind)
-        and (language is None or language in e.channel.languages)
-        and not (needs_human_review and e.has_human_review)
-    ]
+    entries = filter_entries(
+        store.entries(),
+        status=status,
+        kind=kind,
+        language=language,
+        needs_human_review=needs_human_review,
+    )
     if as_json:
         _echo_json([e.summary_dict() for e in entries])
         return
