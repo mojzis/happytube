@@ -83,6 +83,23 @@ reports tokens and an estimated cost (at Opus 5.5 rates, failed calls included);
 rejected key, missing permission or no credit stops the run (`not_vetted` for the
 rest).
 
+### Review UI
+
+```bash
+happytube serve [--host 127.0.0.1] [--port 8000] [--channels-dir PATH] [--reviewer NAME]
+```
+
+Local FastAPI + htmx page (decision 0007) at `http://127.0.0.1:8000/channels`: a
+queue (channels without a human review first, flagged/unresolved on top), a detail
+page (channel, latest evidence, latest vet, all reviews) and an approve / reject /
+unsure form. It needs **no API keys** and writes the same review files as
+`channels review` (always `role: human`) into the registry — commit and push them
+yourself; the app runs no git. `--channels-dir` is the same option and env as the
+`channels` group; `--reviewer` / `HAPPYTUBE_REVIEWER` prefills the form when the
+browser has no remembered name. Only loopback `Host` headers and same-origin POSTs
+are accepted; a non-loopback `--host` warns (no auth). htmx is vendored in
+`review/static/`, no external JS/CSS.
+
 ### Web player
 
 ```bash
@@ -100,7 +117,8 @@ legacy raw JSON from `data/fetched/`, which nothing writes any more (the stages 
 
 uv, ruff (lint/format), ty (type check), pytest, poethepoet (task runner). Python
 >=3.12, src layout (`src/happytube/`), hatchling build. Runtime: click, rich, pandas,
-pyarrow, pydantic(-settings), anthropic, requests, flask, jinja2, pyyaml.
+pyarrow, pydantic(-settings), anthropic, requests, flask, jinja2, pyyaml, fastapi,
+uvicorn, python-multipart (httpx in dev, for `TestClient`).
 
 ## Toolbox
 
@@ -195,13 +213,17 @@ from the repo root.
 ### Key modules
 
 - `cli/commands.py` — click entry point `happytube`; `cli/channels.py` — the
-  `channels` subgroup.
+  `channels` subgroup; `cli/serve.py` — `happytube serve`.
 - `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),
   `store.py` (`ChannelStore`, `derive_status`), `evidence.py` (pure API → `Evidence`
   builder, Shorts by `UUSH` ids or duration), `collect.py` (resolve / evidence
   runs), `vet.py` (pure vetting: flags, prompt, verdict rule, report) and
   `vet_run.py` (`AnthropicVetClient` behind a `VetClient` protocol, `vet_channels`);
   the CLI and the future web UI share them.
+- `review/` — local review UI: `app.py` (`create_app(store, default_reviewer=…)`
+  factory, routes, Host/Origin guard), `queue.py` (pure `queue_sections` sort),
+  `templates/`, `static/` (vendored htmx, `review.css`); reads and writes only
+  through `ChannelStore`.
 - `rubric.py` — calm/happy rubric, video flags, `VideoScore`, `is_suitable`; shared
   by channel vetting and (phase 5) video assessment.
 - `youtube.py` — `YouTubeClient` (injectable getter, quota count, key-free errors,
@@ -273,6 +295,13 @@ data/
     ├── lists/          # Search results
     └── videos/         # Video details
 
+# Review UI (happytube serve)
+src/happytube/review/
+├── app.py              # FastAPI app factory, routes, Host/Origin guard
+├── queue.py            # pure queue order (queue_sections)
+├── templates/          # base, queue, channel + partials, error (Jinja, autoescaped)
+└── static/             # htmx.min.js (vendored 2.0.11), review.css
+
 # Web player
 src/happytube/web/
 ├── server.py           # Flask backend (dev mode)
@@ -295,6 +324,7 @@ Required environment variables in `.env`:
 # API Keys (required)
 YTKEY=your_youtube_api_key              # YouTube Data API v3 key
 ANTHROPIC_API_KEY=your_anthropic_key    # Claude API key (assess, enhance, channels vet)
+HAPPYTUBE_REVIEWER=matous               # optional: prefills the review UI's reviewer
 
 # Optional settings
 LOG_LEVEL=INFO                          # DEBUG, INFO, WARNING, ERROR, CRITICAL

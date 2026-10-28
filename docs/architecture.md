@@ -6,7 +6,8 @@ A Python CLI (`happytube`, click) runs a stage-based pipeline. Each stage reads 
 previous stage's markdown files and writes its own, so stages can be rerun per date.
 A Flask app serves a player for the curated videos; a static export of it deploys to
 GitHub Pages. A git-tracked channel registry holds candidate channels and their human
-and agent reviews; planned: put it in front of fetch, so videos come only from
+and agent reviews; a local FastAPI + htmx review app (`happytube serve`) lets a human
+decide on them. Planned: put the registry in front of fetch, so videos come only from
 human-approved channels (see [plan](plan.md)).
 
 ## Components
@@ -14,7 +15,7 @@ human-approved channels (see [plan](plan.md)).
 Current (`src/happytube/`):
 
 - `cli/` — click commands: `fetch`, `assess`, `enhance`, `report`, `run-all`, `status`,
-  and the `channels` subgroup (`add`, `list`, `show`, `review`, `resolve`,
+  `serve`, and the `channels` subgroup (`add`, `list`, `show`, `review`, `resolve`,
   `evidence`, `vet`; `--json` for agents).
 - `channels/` — channel registry: `Channel`, `Review` and `Evidence` models and
   `ChannelStore` (files under `channels/`). Status is derived from the latest human
@@ -24,6 +25,16 @@ Current (`src/happytube/`):
   `vet.py` holds the pure vetting parts (flags, prompt, verdict rule, report);
   `vet_run.py` the Claude call behind a `VetClient` protocol and the vet run, which
   stops on a rejected key, missing permission or no credit.
+- `review/` — local review UI (decision 0007): `create_app(store, …)` builds a
+  FastAPI app over one `ChannelStore` (no global app, no cache, re-read per
+  request). Queue (`queue.py`: pure `queue_sections` — channels without a human
+  review first, flagged or unresolved on top, then by latest vet verdict), channel
+  page (latest evidence, latest vet from its frontmatter, all reviews) and a review
+  form that writes a `role: human` `Review` via `ChannelStore.add_review`, the same
+  record as `channels review`. Jinja templates (autoescaped) with htmx partials
+  (queue table; reviews section + out-of-band status badge), plain GET/POST
+  fallbacks. A middleware refuses non-loopback `Host` headers (DNS rebinding) and
+  cross-site POSTs by `Origin` / `Sec-Fetch-Site` (CSRF). htmx is vendored.
 - `rubric.py` — the calm/happy rubric, video flags, `VideoScore` and `is_suitable`,
   shared by channel vetting and (phase 5) video assessment.
 - `youtube.py` — small YouTube Data API client (handle resolve, channels,
@@ -40,8 +51,8 @@ Current (`src/happytube/`):
 
 Planned:
 
-- **Web review UI** — channel queue, detail and approve/reject form in a FastAPI +
-  htmx app (decision 0006); the Flask player moves there in phase 5.
+- **Player on FastAPI** — the Flask player moves to the FastAPI stack in phase 5
+  (decision 0006).
 
 ## Data
 
@@ -69,5 +80,8 @@ Planned:
 - **Vetting:** `channels vet` → Claude Opus 5.5 judges the latest snapshot (identity,
   long-form videos only) → vet report + agent review (status unchanged). Skipped
   when the latest vet already used the latest snapshot.
-- **Planned review:** add candidate channel → collect evidence → agent vets → human
+- **Review:** `happytube serve` → queue → channel page → approve / reject / unsure →
+  review file in `channels/<slug>/reviews/` (status derived as for the CLI) → the
+  user commits and pushes.
+- **Planned:** add candidate channel → collect evidence → agent vets → human
   approves in the web UI or CLI → fetch reads only approved channels.
