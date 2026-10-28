@@ -3,7 +3,8 @@ set -e  # Exit immediately if a command exits with a non-zero status
 set -o pipefail  # "cmd | tee" fails when cmd fails, not only when tee does
 
 # Configuration
-HAPPYTUBE_DIR="/home/user/happytube"
+# The repo this script lives in, unless HAPPYTUBE_DIR says otherwise.
+HAPPYTUBE_DIR="${HAPPYTUBE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 # Which pipeline to run: "legacy" (YouTube search + happiness, the default) or
 # "trusted" (approved channels + rubric, decision 0009).
 PIPELINE="${HAPPYTUBE_PIPELINE:-legacy}"
