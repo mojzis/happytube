@@ -54,10 +54,7 @@ def serve(host: str, port: int, channels_dir: Path, reviewer: str | None) -> Non
 
     host = host.strip("[]")
     if is_wildcard(host):
-        msg = (
-            f"--host {host}: bind a concrete address (e.g. your LAN IP); "
-            "there is no auth"
-        )
+        msg = f"{host}: bind a concrete address (e.g. your LAN IP); there is no auth"
         raise click.BadParameter(msg, param_hint="--host")
     _check_port_free(host, port)
     if not is_loopback(host):
