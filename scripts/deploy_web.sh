@@ -16,9 +16,7 @@ fi
 # Step 1: Export videos to static JSON
 echo ""
 echo "📊 Step 1: Exporting videos to static JSON..."
-uv run python -m happytube.web.export
-
-if [ $? -ne 0 ]; then
+if ! uv run python -m happytube.web.export; then
     echo "❌ Export failed. Make sure the export can read data/fetched."
     exit 1
 fi
@@ -30,7 +28,7 @@ if [ ! -f "src/happytube/web/static/videos.json" ]; then
 fi
 
 # Count videos
-VIDEO_COUNT=$(python -c "import json; print(len(json.load(open('src/happytube/web/static/videos.json'))))")
+VIDEO_COUNT=$(uv run python -c "import json; print(len(json.load(open('src/happytube/web/static/videos.json'))))")
 echo "✅ Exported $VIDEO_COUNT videos"
 
 # Step 2: Test locally (optional)
