@@ -42,9 +42,9 @@ class TrustedStage(Stage):
     def load(self, target_date: date) -> list[MarkdownFile]:
         return [MarkdownFile.load(p) for p in self.files(target_date)]
 
-    def load_until(self, target_date: date) -> list[tuple[date, MarkdownFile]]:
-        """Every file dated ``target_date`` or earlier, with its date, oldest
-        date first (directories not named ``YYYY-MM-DD`` are ignored)."""
+    def days(self) -> list[date]:
+        """Dates that have a directory, oldest first (directories not named
+        ``YYYY-MM-DD`` are ignored)."""
         if not self.stage_path.is_dir():
             return []
         days = []
@@ -53,9 +53,19 @@ class TrustedStage(Stage):
                 day = date.fromisoformat(directory.name)
             except ValueError:
                 continue
-            if directory.is_dir() and day <= target_date:
+            if directory.is_dir():
                 days.append(day)
-        return [(day, md) for day in sorted(days) for md in self.load(day)]
+        return sorted(days)
+
+    def load_until(self, target_date: date) -> list[tuple[date, MarkdownFile]]:
+        """Every file dated ``target_date`` or earlier, with its date, oldest
+        date first."""
+        return [
+            (day, md)
+            for day in self.days()
+            if day <= target_date
+            for md in self.load(day)
+        ]
 
     def remove(self, video_id: str) -> list[Path]:
         """Delete this video's files on every date; the paths removed."""
