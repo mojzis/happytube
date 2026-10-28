@@ -22,9 +22,8 @@ calls (fakes only); none needed.
   if present (report it in the result, e.g. `unenhanced`). Test.
 
 ## Also fix
-- R3: `run` checks the Anthropic key up front (before fetch) unless there's nothing
-  to assess is impossible to know — so: fail fast before fetch if the key is
-  missing, clear message, exit ≠ 0. (Pick the simpler correct behaviour; say which.)
+- R3: `run` checks that ANTHROPIC_API_KEY is set before fetch (fail fast, clear
+  message, exit ≠ 0, nothing fetched). Test.
 - R4: video_id must match `^[A-Za-z0-9_-]{11}$`; others counted as unreadable, not
   written. Test.
 - R5: `Usage` defined in claude.py; `VetUsage` becomes the alias (vet YAML unchanged —
