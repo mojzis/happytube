@@ -7,7 +7,16 @@ from fastapi.testclient import TestClient
 from happytube.channels.models import Review
 from happytube.channels.store import ChannelStore
 from happytube.review.app import create_app
-from tests.player_helpers import PLAYER, PLAYER_BARE, PLAYER_JSON, vid, write_shown
+from happytube.trusted.video_reviews import VideoReviewStore
+from tests.player_helpers import (
+    PLAYER,
+    PLAYER_BARE,
+    PLAYER_JSON,
+    review_store,
+    vid,
+    vreview,
+    write_shown,
+)
 from tests.review_helpers import BASE_URL
 from tests.trusted_helpers import add_channel
 
@@ -29,7 +38,12 @@ def _client(tmp_path, base_url=BASE_URL) -> TestClient:
     stages = tmp_path / "stages"
     write_shown(stages, "zoo", 1)
     write_shown(stages, "gone", 2)
-    app = create_app(store, default_reviewer=None, stages_dir=stages)
+    app = create_app(
+        store,
+        default_reviewer=None,
+        stages_dir=stages,
+        video_reviews=review_store(tmp_path),
+    )
     return TestClient(app, base_url=base_url)
 
 
@@ -75,7 +89,12 @@ def test_videos_json_follows_a_later_reject(tmp_path):
 
 def test_videos_json_empty_without_stages_warns_once(tmp_path, caplog):
     store = ChannelStore(tmp_path / "channels")
-    app = create_app(store, default_reviewer=None, stages_dir=tmp_path / "none")
+    app = create_app(
+        store,
+        default_reviewer=None,
+        stages_dir=tmp_path / "none",
+        video_reviews=review_store(tmp_path),
+    )
     client = TestClient(app, base_url=BASE_URL)
 
     with caplog.at_level(logging.WARNING, logger="happytube.review.app"):
@@ -100,3 +119,20 @@ def test_player_behind_host_guard(tmp_path):
     client = _client(tmp_path, base_url="http://evil.example")
     assert client.get(PLAYER).status_code == 400
     assert client.get(PLAYER_JSON).status_code == 400
+
+
+def test_videos_json_follows_a_human_unsuitable(tmp_path):
+    client = _client(tmp_path)
+    assert [v["video_id"] for v in client.get(PLAYER_JSON).json()] == [vid(1)]
+    review_store(tmp_path).add_review(vid(1), vreview("unsuitable"))
+    assert client.get(PLAYER_JSON).json() == []
+
+
+def test_videos_json_fails_loudly_without_reviews_dir(tmp_path, caplog):
+    store = ChannelStore(tmp_path / "channels")
+    missing = VideoReviewStore(tmp_path / "nope")
+    app = create_app(store, default_reviewer=None, video_reviews=missing)
+    with caplog.at_level(logging.ERROR):
+        response = TestClient(app, base_url=BASE_URL).get(PLAYER_JSON)
+    assert response.status_code == 500
+    assert "nope" in response.json()["error"]

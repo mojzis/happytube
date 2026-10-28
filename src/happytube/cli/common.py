@@ -1,5 +1,6 @@
-"""Pieces shared by the ``channels``, ``trusted`` and ``serve`` commands: the
-``--channels-dir``, ``--stages-dir`` and ``--json`` options, JSON and plain-line
+"""Pieces shared by the ``channels``, ``videos``, ``trusted`` and ``serve``
+commands: the ``--channels-dir``, ``--stages-dir``, ``--video-reviews-dir`` and
+``--json`` options, JSON and plain-line
 output, the store-error wrapper and the YouTube client from ``YTKEY``."""
 
 import json
@@ -12,9 +13,10 @@ import click
 from pydantic import ValidationError
 from rich.console import Console
 
-from happytube.channels.store import ChannelStoreError
 from happytube.config.settings import YouTubeSettings
 from happytube.paths import PROJECT_ROOT
+from happytube.records import StoreError
+from happytube.trusted.video_reviews import VIDEO_REVIEWS_DIR
 from happytube.youtube import YouTubeClient
 
 console = Console()
@@ -43,6 +45,16 @@ stages_dir_option = click.option(
     "current directory (env: HAPPYTUBE_STAGES_DIR).",
 )
 
+video_reviews_dir_option = click.option(
+    "--video-reviews-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    envvar="HAPPYTUBE_VIDEO_REVIEWS_DIR",
+    default=VIDEO_REVIEWS_DIR,
+    show_default="video-reviews/ at repo root",
+    help="Video spot-check reviews directory; must exist "
+    "(env: HAPPYTUBE_VIDEO_REVIEWS_DIR).",
+)
+
 
 def echo_json(data: Any) -> None:
     click.echo(json.dumps(data, ensure_ascii=False, indent=2))
@@ -63,7 +75,7 @@ def with_message(text: str, message: str | None) -> str:
 def store_errors_as_click(f: Callable) -> Callable:
     """Turn store and input-validation errors into a clean stderr message, exit 1.
 
-    Problems in files on disk arrive as ``ChannelStoreError`` naming the file; a
+    Problems in files on disk arrive as ``StoreError`` naming the file; a
     ``ValidationError`` here comes from command-line input.
     """
 
@@ -71,7 +83,7 @@ def store_errors_as_click(f: Callable) -> Callable:
     def wrapper(*args, **kwargs):
         try:
             return f(*args, **kwargs)
-        except ChannelStoreError as e:
+        except StoreError as e:
             raise click.ClickException(str(e)) from e
         except ValidationError as e:
             problems = "; ".join(

@@ -6,8 +6,8 @@ reader and writer, re-read on every request. Reviews posted here are the same
 records ``happytube channels review`` writes, always ``role: human``.
 
 ``/player/`` serves the static player page (``happytube/web/static``) and
-``/player/videos.json`` the selection read live from ``stages/trusted/`` and the
-registry — the same rule the GitHub Pages export uses.
+``/player/videos.json`` the selection read live from ``stages/trusted/``, the
+registry and ``video-reviews/`` — the same rule the GitHub Pages export uses.
 
 The app has no auth and writes files, so it only answers requests whose ``Host`` is
 loopback (or the ``--host`` it was started with) — against DNS rebinding — and
@@ -49,6 +49,11 @@ from happytube.review.queue import (
     queue_sections,
 )
 from happytube.trusted.player import player_videos, videos_json
+from happytube.trusted.video_reviews import (
+    VIDEO_REVIEWS_DIR,
+    VideoReviewsMissingError,
+    VideoReviewStore,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -328,23 +333,10 @@ def _remember_reviewer(response: Response, reviewer: str) -> None:
     )
 
 
-def create_app(
-    store: ChannelStore,
-    *,
-    default_reviewer: str | None,
-    bind_host: str | None = None,
-    stages_dir: Path = Path("stages"),
-) -> FastAPI:
-    """The review app over ``store``. ``default_reviewer`` prefills the form; without
-    it, the browser's reviewer cookie does. ``bind_host`` is the ``--host`` served on;
-    a non-loopback one is also accepted in the ``Host`` header. The player reads
-    ``<stages_dir>/trusted/``."""
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    pages = _Pages(default_reviewer)
-    _install_guard(app, allowed_host_names(bind_host))
-    _install_error_handlers(app, pages)
-    app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
-
+def _install_player(
+    app: FastAPI, store: ChannelStore, stages_dir: Path, reviews: VideoReviewStore
+) -> None:
+    """``/player/videos.json`` (the live selection) and the static player page."""
     trusted_dir = stages_dir / "trusted"
     warned_missing = False
 
@@ -357,10 +349,38 @@ def create_app(
             # A wrong --stages-dir would otherwise look like "no videos yet".
             logger.warning("Player: %s does not exist; showing no videos", trusted_dir)
             warned_missing = True
-        videos = videos_json(player_videos(stages_dir, store))
+        try:
+            videos = videos_json(player_videos(stages_dir, store, reviews))
+        except VideoReviewsMissingError as e:
+            # Never "no reviews": that could show videos a human hid.
+            logger.error("Player: %s", e)  # noqa: TRY400 — message, no traceback
+            return JSONResponse({"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
         return JSONResponse(videos, headers={"Cache-Control": "no-store"})
 
     app.mount("/player", StaticFiles(directory=PLAYER_DIR, html=True), name="player")
+
+
+def create_app(
+    store: ChannelStore,
+    *,
+    default_reviewer: str | None,
+    bind_host: str | None = None,
+    stages_dir: Path = Path("stages"),
+    video_reviews: VideoReviewStore | None = None,
+) -> FastAPI:
+    """The review app over ``store``. ``default_reviewer`` prefills the form; without
+    it, the browser's reviewer cookie does. ``bind_host`` is the ``--host`` served on;
+    a non-loopback one is also accepted in the ``Host`` header. The player reads
+    ``<stages_dir>/trusted/`` and ``video_reviews`` (default: ``video-reviews/`` at
+    the repo root)."""
+    reviews = video_reviews or VideoReviewStore(VIDEO_REVIEWS_DIR)
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    pages = _Pages(default_reviewer)
+    _install_guard(app, allowed_host_names(bind_host))
+    _install_error_handlers(app, pages)
+    app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
+
+    _install_player(app, store, stages_dir, reviews)
 
     @app.get("/")
     async def index() -> RedirectResponse:

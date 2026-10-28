@@ -1,7 +1,6 @@
 """Video review store, derived verdict and agreement (decision 0011)."""
 
 import logging
-from datetime import UTC, datetime, timedelta
 
 import pytest
 import yaml
@@ -10,29 +9,12 @@ from happytube.trusted.video_reviews import (
     NO_REVIEWS,
     ReviewState,
     VideoNotFoundError,
-    VideoReview,
     VideoReviewsMissingError,
     VideoReviewStore,
     agreement,
     hidden_ids,
 )
-from tests.player_helpers import vid
-
-T0 = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
-
-
-def vreview(verdict="suitable", role="human", minutes=0, agent=True, **over):
-    fields = {
-        "reviewer": "mojzis" if role == "human" else "claude",
-        "role": role,
-        "verdict": verdict,
-        "watched": "full",
-        "created_at": T0 + timedelta(minutes=minutes),
-        "agent_suitable": agent,
-        "rubric_version": 1,
-        "assessed_at": T0 - timedelta(days=1),
-    }
-    return VideoReview.model_validate(fields | over)
+from tests.player_helpers import vid, vreview
 
 
 @pytest.fixture
