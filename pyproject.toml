@@ -84,8 +84,14 @@ show_missing = true
 [tool.vulture]
 paths = ["src"]
 # Framework-registered code vulture cannot see being used: click commands, Flask
-# routes and pydantic validators are called through their decorators.
-ignore_decorators = ["@cli.command", "@app.route", "@field_validator"]
+# routes and pydantic validators/serializers are called through their decorators.
+ignore_decorators = [
+    "@cli.command",
+    "@channels.command",
+    "@app.route",
+    "@field_validator",
+    "@field_serializer",
+]
 # Pydantic model fields and settings are read via model_dump/validation, not by
 # attribute access in src/.
 ignore_names = [
@@ -100,6 +106,9 @@ ignore_names = [
     "happiness_reasoning",
     "assessed_at",
     "enhanced_at",
+    "added_at",
+    # click passes ctx.obj to @pass_obj commands.
+    "obj",
 ]
 
 [tool.deptry]

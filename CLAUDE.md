@@ -39,6 +39,24 @@ happytube --help                                       # or <command> --help
 
 Run via `uv run happytube …`. Daily automation: `./scripts/daily_run.sh` (cron-ready).
 
+### Channel registry
+
+```bash
+happytube channels list [--status candidate|approved|rejected] [--kind zoo] \
+    [--language cs] [--needs-human-review] [--json]
+happytube channels show bbc-earth [--json]
+happytube channels add "Zoo Zlín" --kind zoo --language cs [--handle @…] \
+    [--channel-id UC…] [--url …] [--slug …] [--notes …] --added-by matous [--json]
+happytube channels review bbc-earth --reviewer matous --role human \
+    --verdict approve|reject|unsure [--notes …] [--json]
+```
+
+No API keys needed. `--json` prints plain JSON to stdout (errors go to stderr, exit
+≠ 0) — agents use that. Registry dir: `--channels-dir` / `HAPPYTUBE_CHANNELS_DIR`,
+default `channels/` at the repo root. Status is derived: the latest *human*
+approve/reject decides; agent reviews never change it; `rejected` is the blocklist
+(decision 0003).
+
 ### Web player
 
 ```bash
@@ -150,7 +168,10 @@ from the repo root.
 
 ### Key modules
 
-- `cli/commands.py` — click entry point `happytube`.
+- `cli/commands.py` — click entry point `happytube`; `cli/channels.py` — the
+  `channels` subgroup.
+- `channels/` — registry `models.py` (`Channel`, `Review`, `slugify`) and `store.py`
+  (`ChannelStore`, `derive_status`); the CLI and the future web UI share it.
 - `config/settings.py` (pydantic settings from `.env`), `config/config_manager.py`
   (YAML from `config/base/`).
 - `models/markdown.py` (`MarkdownFile`), `models/video.py` (`Video`, parquet export).
@@ -173,6 +194,13 @@ stages/
 │       └── video_abc123.md
 └── report/             # Generated reports
     └── YYYY-MM-DD.html
+
+# Channel registry (git-tracked, decision 0003)
+channels/
+└── bbc-earth/
+    ├── channel.yaml                    # metadata, written once by `channels add`
+    └── reviews/                        # append-only, one file per review
+        └── 20261028T101500Z-matous.yaml
 
 # Analytics exports
 parquet/

@@ -5,14 +5,19 @@
 A Python CLI (`happytube`, click) runs a stage-based pipeline. Each stage reads the
 previous stage's markdown files and writes its own, so stages can be rerun per date.
 A Flask app serves a player for the curated videos; a static export of it deploys to
-GitHub Pages. Planned: a channel registry and review layer in front of fetch, so
-videos come only from human-approved channels (see [plan](plan.md)).
+GitHub Pages. A git-tracked channel registry holds candidate channels and their human
+and agent reviews; planned: put it in front of fetch, so videos come only from
+human-approved channels (see [plan](plan.md)).
 
 ## Components
 
 Current (`src/happytube/`):
 
-- `cli/` — click commands: `fetch`, `assess`, `enhance`, `report`, `run-all`, `status`.
+- `cli/` — click commands: `fetch`, `assess`, `enhance`, `report`, `run-all`, `status`,
+  and the `channels` subgroup (`add`, `list`, `show`, `review`; `--json` for agents).
+- `channels/` — channel registry: `Channel` and `Review` models and `ChannelStore`
+  (files under `channels/`). Status is derived from the latest human approve/reject;
+  agent reviews never change it; a rejected channel is the blocklist entry.
 - `stages/` — `fetch` (YouTube Data API search), `assess` (Claude happiness score
   1–5), `enhance` (Claude rewrites descriptions of videos scoring ≥ threshold),
   `report` (HTML report + parquet exports).
@@ -23,10 +28,7 @@ Current (`src/happytube/`):
 
 Planned:
 
-- **Channel registry** — channel files (`candidate` / `approved` / `rejected`) with
-  ids, kind, language.
 - **Evidence** — per-channel stats and recent uploads, cached.
-- **Review records** — who (human or agent), verdict, notes, when; one shape for both.
 - **Agent vetting** — Claude reads evidence with the calm/happy rubric and writes a
   vet report plus an agent review record.
 - **Web review UI** — channel queue, detail and approve/reject form in the Flask app.
@@ -37,7 +39,10 @@ Planned:
 - `stages/report/YYYY-MM-DD.html`, `parquet/<stage>/by-run-date/*.parquet`.
 - `config/base/*.yaml` — app, prompts, YouTube search settings.
 - `data/fetched/` (git-ignored) — legacy raw API JSON the web player still reads.
-- Planned: channel, evidence and review files in git (see decision 0002).
+- `channels/<slug>/channel.yaml` and `channels/<slug>/reviews/<UTC stamp>-<reviewer>.yaml`
+  — registry and append-only review records in git (decisions 0002, 0003).
+- Planned: per-channel evidence (`evidence/`) and vet reports (`vet/`) next to
+  `reviews/`.
 
 ## Flows
 
