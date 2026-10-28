@@ -16,6 +16,17 @@ from happytube.utils import determine_text_script
 
 REQUEST_TIMEOUT_S = 30
 
+logger = logging.getLogger(__name__)
+
+
+class YouTubeAPIError(RuntimeError):
+    """A YouTube Data API request returned a non-200 response."""
+
+    def __init__(self, endpoint: str, status_code: int, reason: str):
+        # Deliberately no URL: it carries the API key as a query parameter.
+        super().__init__(f"YouTube {endpoint} request failed: {status_code} {reason}")
+        self.status_code = status_code
+
 
 @dataclass
 class YtQuery:
@@ -32,11 +43,17 @@ class YtQuery:
         self.params["key"] = self.key
 
     def get(self):
+        """Run the request and store its ``items``; raise on any non-200 reply."""
         response = requests.get(self.url, params=self.params, timeout=REQUEST_TIMEOUT_S)
-        if response.status_code == HTTPStatus.OK:
-            self.data = response.json()["items"]
-        else:
-            logging.error(f"Error: {response.status_code}")
+        if response.status_code != HTTPStatus.OK:
+            logger.error(
+                "YouTube %s request failed: HTTP %s %s",
+                self.name,
+                response.status_code,
+                response.text[:500],
+            )
+            raise YouTubeAPIError(self.name, response.status_code, response.reason)
+        self.data = response.json()["items"]
 
     def store_locally(self):
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M")
@@ -69,6 +86,7 @@ class Search(YtQuery):
             "videoDimension": "2d",  # "3d", "any"
             "videoCategoryId": 15,
         }
+        super().__post_init__()
 
     def get_df(self):
         data = pd.DataFrame([get_search_data(r) for r in self.data])
@@ -115,6 +133,7 @@ class Videos(YtQuery):
             "chart": "mostPopular",
             "videoCategoryId": 15,
         }
+        super().__post_init__()
 
 
 def get_search_data(row):
