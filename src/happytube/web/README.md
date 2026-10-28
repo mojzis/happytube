@@ -2,9 +2,14 @@
 
 A simple, controlled web player for curated YouTube videos from HappyTube.
 
+> **Known gap (2026-10):** the player and `happytube.web.export` still read raw
+> YouTube JSON from `data/fetched/`, which only the removed legacy `happytube.main`
+> wrote. `happytube run-all` writes `stages/` instead, so the export finds 0 videos
+> until the player is wired to stage output.
+
 ## Two Modes
 
-1. **Development Mode** (Flask): Run locally with `poetry run python -m happytube.web.server`
+1. **Development Mode** (Flask): Run locally with `uv run python -m happytube.web.server`
 2. **Static Mode** (Deployment): Deploy to GitHub Pages, Netlify, or any static host
 
 ## Features
@@ -33,10 +38,10 @@ The player uses the YouTube IFrame API with the following restrictions to preven
 
 ```bash
 # 1. Fetch and rate videos
-poetry run python -m happytube.main
+uv run happytube run-all
 
 # 2. Start development server
-poetry run python -m happytube.web.server
+uv run python -m happytube.web.server
 
 # 3. Open http://127.0.0.1:5000
 ```
@@ -45,10 +50,10 @@ poetry run python -m happytube.web.server
 
 ```bash
 # 1. Fetch and rate videos
-poetry run python -m happytube.main
+uv run happytube run-all
 
 # 2. Export to static JSON
-poetry run python -m happytube.web.export
+uv run python -m happytube.web.export
 
 # 3. Deploy the static/ folder to GitHub Pages
 # See DEPLOYMENT.md for detailed instructions
@@ -77,7 +82,7 @@ In static mode, the player loads from `videos.json` directly.
 ## Project Structure
 
 ```
-happytube/web/
+src/happytube/web/
 ├── server.py           # Flask backend (development mode)
 ├── export.py           # Export script for static deployment
 ├── templates/

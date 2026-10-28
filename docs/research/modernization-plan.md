@@ -1,3 +1,6 @@
+> Historical (2025-11): the plan behind the current stage-based pipeline. Kept for
+> context; the current plan is [`docs/plan.md`](../plan.md).
+
 # HappyTube Modernization Plan
 
 ## Overview

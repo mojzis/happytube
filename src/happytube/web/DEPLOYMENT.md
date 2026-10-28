@@ -2,6 +2,11 @@
 
 This guide explains how to deploy the HappyTube web player to GitHub Pages or other static hosting services.
 
+> **Known gap (2026-10):** the player and `happytube.web.export` still read raw
+> YouTube JSON from `data/fetched/`, which only the removed legacy `happytube.main`
+> wrote. `happytube run-all` writes `stages/` instead, so the export finds 0 videos
+> until the player is wired to stage output.
+
 ## Overview
 
 The web player can run in two modes:
@@ -17,17 +22,17 @@ First, fetch and rate videos using the main pipeline:
 
 ```bash
 # Fetch videos and rate them with Claude
-poetry run python -m happytube.main
+uv run happytube run-all
 ```
 
 Then export to static JSON:
 
 ```bash
 # Export videos to static JSON file
-poetry run python -m happytube.web.export
+uv run python -m happytube.web.export
 ```
 
-This creates `happytube/web/static/videos.json` with your curated video list.
+This creates `src/happytube/web/static/videos.json` with your curated video list.
 
 ### Step 2: Configure GitHub Pages
 
@@ -35,7 +40,7 @@ This creates `happytube/web/static/videos.json` with your curated video list.
 2. Navigate to **Settings** → **Pages**
 3. Under "Source", select:
    - **Branch**: `main` (or your deployment branch)
-   - **Folder**: `/happytube/web/static`
+   - **Folder**: `src/happytube/web/static`
 4. Click **Save**
 
 ### Step 3: Access Your Site
@@ -53,13 +58,13 @@ To add new videos to your deployed site:
 
 ```bash
 # 1. Fetch new videos
-poetry run python -m happytube.main
+uv run happytube run-all
 
 # 2. Export to static JSON
-poetry run python -m happytube.web.export
+uv run python -m happytube.web.export
 
 # 3. Commit and push
-git add happytube/web/static/videos.json
+git add src/happytube/web/static/videos.json
 git commit -m "Update video list"
 git push
 ```
@@ -72,8 +77,8 @@ GitHub Pages will automatically redeploy within a few minutes.
 
 1. Connect your GitHub repository to Netlify
 2. Set build settings:
-   - **Build command**: `poetry run python -m happytube.web.export`
-   - **Publish directory**: `happytube/web/static`
+   - **Build command**: `uv run python -m happytube.web.export`
+   - **Publish directory**: `src/happytube/web/static`
 3. Deploy!
 
 Netlify will automatically rebuild when you push to GitHub.
@@ -83,7 +88,7 @@ Netlify will automatically rebuild when you push to GitHub.
 1. Import your repository to Vercel
 2. Configure:
    - **Framework**: Other
-   - **Root Directory**: `happytube/web/static`
+   - **Root Directory**: `src/happytube/web/static`
    - **Build Command**: (leave empty, pre-build with export script)
 3. Deploy!
 
@@ -91,7 +96,7 @@ Netlify will automatically rebuild when you push to GitHub.
 
 After deploying to GitHub Pages:
 
-1. Add a `CNAME` file to `happytube/web/static/`:
+1. Add a `CNAME` file to `src/happytube/web/static/`:
    ```
    your-domain.com
    ```
@@ -123,26 +128,26 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Poetry
-        run: curl -sSL https://install.python-poetry.org | python3 -
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: poetry install
+        run: uv sync
 
       - name: Fetch and rate videos
         env:
           YTKEY: ${{ secrets.YTKEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: poetry run python -m happytube.main
+        run: uv run happytube run-all
 
       - name: Export to static JSON
-        run: poetry run python -m happytube.web.export
+        run: uv run python -m happytube.web.export
 
       - name: Commit and push if changed
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
-          git add happytube/web/static/videos.json
+          git add src/happytube/web/static/videos.json
           git diff --quiet && git diff --staged --quiet || \
             (git commit -m "Auto-update video list [skip ci]" && git push)
 ```
@@ -157,15 +162,15 @@ Test the static build locally before deploying:
 
 ```bash
 # Export videos
-poetry run python -m happytube.web.export
+uv run python -m happytube.web.export
 
 # Serve static files (Python 3)
-cd happytube/web/static
+cd src/happytube/web/static
 python -m http.server 8000
 
 # Or use any static server
 # npm: npx serve
-# Or: poetry run python -m http.server 8000
+# Or: uv run python -m http.server 8000
 ```
 
 Visit `http://localhost:8000` to test.
@@ -177,8 +182,8 @@ Visit `http://localhost:8000` to test.
 **Issue**: "Error loading videos. Make sure videos.json exists."
 
 **Solution**:
-1. Make sure you ran the export script: `poetry run python -m happytube.web.export`
-2. Check that `happytube/web/static/videos.json` exists
+1. Make sure you ran the export script: `uv run python -m happytube.web.export`
+2. Check that `src/happytube/web/static/videos.json` exists
 3. Verify the JSON file is not empty
 
 ### No videos available
@@ -186,8 +191,8 @@ Visit `http://localhost:8000` to test.
 **Issue**: "No videos available. Please run the main HappyTube script first."
 
 **Solution**:
-1. Run the main pipeline: `poetry run python -m happytube.main`
-2. Then export: `poetry run python -m happytube.web.export`
+1. Run the main pipeline: `uv run happytube run-all`
+2. Then export: `uv run python -m happytube.web.export`
 
 ### CORS errors in browser console
 
@@ -202,7 +207,7 @@ Visit `http://localhost:8000` to test.
 **Issue**: Site shows 404 after enabling GitHub Pages
 
 **Solution**:
-1. Verify the publish folder is set to `/happytube/web/static`
+1. Verify the publish folder is set to `src/happytube/web/static`
 2. Check that `index.html` exists in that folder
 3. Wait a few minutes for deployment to complete
 4. Check GitHub Actions tab for any errors
