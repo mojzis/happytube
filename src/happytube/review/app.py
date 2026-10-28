@@ -1,8 +1,13 @@
-"""Local web review UI for the channel registry (decision 0007).
+"""Local web app: the channel review UI (decision 0007) and the player
+(decision 0010).
 
 ``create_app`` builds a FastAPI app over one ``ChannelStore``; the store is the only
 reader and writer, re-read on every request. Reviews posted here are the same
 records ``happytube channels review`` writes, always ``role: human``.
+
+``/player/`` serves the static player page (``happytube/web/static``) and
+``/player/videos.json`` the selection read live from ``stages/trusted/`` and the
+registry — the same rule the GitHub Pages export uses.
 
 The app has no auth and writes files, so it only answers requests whose ``Host`` is
 loopback (or the ``--host`` it was started with) — against DNS rebinding — and
@@ -20,7 +25,7 @@ from urllib.parse import quote, unquote
 
 import jinja2
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -42,8 +47,10 @@ from happytube.review.queue import (
     next_entry,
     queue_sections,
 )
+from happytube.trusted.player import player_videos, videos_json
 
 PACKAGE_DIR = Path(__file__).parent
+PLAYER_DIR = PACKAGE_DIR.parent / "web" / "static"
 REVIEWER_COOKIE = "happytube_reviewer"
 COOKIE_MAX_AGE = 365 * 24 * 3600
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -323,15 +330,26 @@ def create_app(
     *,
     default_reviewer: str | None,
     bind_host: str | None = None,
+    stages_dir: Path = Path("stages"),
 ) -> FastAPI:
     """The review app over ``store``. ``default_reviewer`` prefills the form; without
     it, the browser's reviewer cookie does. ``bind_host`` is the ``--host`` served on;
-    a non-loopback one is also accepted in the ``Host`` header."""
+    a non-loopback one is also accepted in the ``Host`` header. The player reads
+    ``<stages_dir>/trusted/``."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     pages = _Pages(default_reviewer)
     _install_guard(app, allowed_host_names(bind_host))
     _install_error_handlers(app, pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
+
+    # Before the /player mount, so a videos.json left in the static dir by an
+    # export never shadows the live selection.
+    @app.get("/player/videos.json")
+    def player_json() -> JSONResponse:
+        videos = videos_json(player_videos(stages_dir, store))
+        return JSONResponse(videos, headers={"Cache-Control": "no-store"})
+
+    app.mount("/player", StaticFiles(directory=PLAYER_DIR, html=True), name="player")
 
     @app.get("/")
     async def index() -> RedirectResponse:

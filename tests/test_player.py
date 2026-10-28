@@ -8,7 +8,6 @@ import pytest
 
 from happytube.channels.models import Status
 from happytube.channels.store import ChannelStore
-from happytube.models.markdown import MarkdownFile
 from happytube.trusted.player import (
     StageRecord,
     channel_statuses,
@@ -17,34 +16,16 @@ from happytube.trusted.player import (
     select_videos,
     videos_json,
 )
-from happytube.trusted.stages import StageName, TrustedStage
+from happytube.trusted.stages import TrustedStage
+from tests.player_helpers import DAY, assess_fm, vid, write
 from tests.trusted_helpers import add_channel
 
-DAY = date(2026, 10, 20)
 LATER = date(2026, 10, 27)
 APPROVED: dict[str, Status] = {
     "zoo": "approved",
     "gone": "rejected",
     "maybe": "candidate",
 }
-
-
-def vid(n: int) -> str:
-    return f"vid{n:08d}"
-
-
-def assess_fm(n: int, **over) -> dict:
-    return {
-        "video_id": vid(n),
-        "title": f"Title {n}",
-        "channel_slug": "zoo",
-        "channel_name": "Zoo",
-        "published_at": f"2026-10-{10 + n:02d}T10:00:00Z",
-        "duration_s": 600,
-        "calm": 5,
-        "happy": 4,
-        "suitable": True,
-    } | over
 
 
 def rec(frontmatter: dict, day: date = DAY, name: str | None = None) -> StageRecord:
@@ -146,13 +127,9 @@ def test_skipped_file_is_named_in_a_warning(caplog):
     assert str(bad.path) in caplog.text
 
 
-def _write(stages: Path, stage: StageName, day: date, n: int, fm: dict) -> Path:
-    return TrustedStage(stage, stages).write(day, vid(n), MarkdownFile(fm, "body"))
-
-
 def test_read_stage_skips_unreadable_files(tmp_path, caplog):
     stages = tmp_path / "stages"
-    good = _write(stages, "assess", DAY, 1, assess_fm(1))
+    good = write(stages, "assess", 1, assess_fm(1))
     broken = good.with_name(f"{vid(2)}.md")
     broken.write_text("---\nkey: [unclosed\n---\n", encoding="utf-8")
     plain = good.with_name(f"{vid(3)}.md")
@@ -171,13 +148,13 @@ def test_player_videos_over_files_and_registry(tmp_path):
     add_channel(store, "gone", "UCgone", verdict="reject")
     add_channel(store, "maybe", "UCmaybe", verdict=None)
     stages = tmp_path / "stages"
-    _write(stages, "assess", DAY, 1, assess_fm(1))
-    _write(stages, "assess", DAY, 2, assess_fm(2, channel_slug="gone"))
-    _write(stages, "assess", DAY, 3, assess_fm(3, channel_slug="maybe"))
-    _write(stages, "assess", DAY, 4, assess_fm(4))  # suitable, not enhanced yet
-    _write(stages, "enhance", DAY, 1, dict(enh(1).frontmatter))
-    _write(stages, "enhance", DAY, 2, dict(enh(2).frontmatter))
-    _write(stages, "enhance", DAY, 3, dict(enh(3).frontmatter))
+    write(stages, "assess", 1, assess_fm(1))
+    write(stages, "assess", 2, assess_fm(2, channel_slug="gone"))
+    write(stages, "assess", 3, assess_fm(3, channel_slug="maybe"))
+    write(stages, "assess", 4, assess_fm(4))  # suitable, not enhanced yet
+    write(stages, "enhance", 1, dict(enh(1).frontmatter))
+    write(stages, "enhance", 2, dict(enh(2).frontmatter))
+    write(stages, "enhance", 3, dict(enh(3).frontmatter))
     assert channel_statuses(store) == {
         "gone": "rejected",
         "maybe": "candidate",

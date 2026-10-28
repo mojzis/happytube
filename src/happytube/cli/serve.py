@@ -1,4 +1,5 @@
-"""``happytube serve`` — the local channel review UI (decision 0007).
+"""``happytube serve`` — the local channel review UI (decision 0007) and the
+player at ``/player/`` (decision 0010).
 
 Needs no API keys. Writes review files into the registry like
 ``happytube channels review``; committing them is up to the user. FastAPI and
@@ -11,7 +12,7 @@ from pathlib import Path
 import click
 
 from happytube.channels.store import ChannelStore
-from happytube.cli.common import channels_dir_option
+from happytube.cli.common import channels_dir_option, stages_dir_option
 
 
 def _check_port_free(host: str, port: int) -> None:
@@ -36,14 +37,18 @@ def _check_port_free(host: str, port: int) -> None:
 )
 @click.option("--port", default=8000, show_default=True, type=click.IntRange(1, 65535))
 @channels_dir_option
+@stages_dir_option
 @click.option(
     "--reviewer",
     envvar="HAPPYTUBE_REVIEWER",
     help="Name prefilled in the review form when the browser has none remembered "
     "(env: HAPPYTUBE_REVIEWER).",
 )
-def serve(host: str, port: int, channels_dir: Path, reviewer: str | None) -> None:
-    """Serve the channel review UI on HOST:PORT (local only, no auth)."""
+def serve(
+    host: str, port: int, channels_dir: Path, stages_dir: Path, reviewer: str | None
+) -> None:
+    """Serve the channel review UI and the player on HOST:PORT (local only, no
+    auth)."""
     import uvicorn  # noqa: PLC0415 — heavy, only this command needs it
 
     from happytube.review.app import (  # noqa: PLC0415
@@ -66,8 +71,13 @@ def serve(host: str, port: int, channels_dir: Path, reviewer: str | None) -> Non
         )
     url_host = f"[{host}]" if ":" in host else host
     click.echo(f"Channel review UI: http://{url_host}:{port}/")
+    click.echo(f"Player: http://{url_host}:{port}/player/")
     click.echo(f"Registry: {channels_dir}")
+    click.echo(f"Stages: {stages_dir}")
     app = create_app(
-        ChannelStore(channels_dir), default_reviewer=reviewer, bind_host=host
+        ChannelStore(channels_dir),
+        default_reviewer=reviewer,
+        bind_host=host,
+        stages_dir=stages_dir,
     )
     uvicorn.run(app, host=host, port=port)

@@ -15,21 +15,13 @@ function onYouTubeIframeAPIReady() {
 }
 
 /**
- * Load videos from backend API (Flask) or static JSON file (GitHub Pages)
+ * Load videos.json next to this page: served live by `happytube serve` under
+ * /player/, a build product of the export on GitHub Pages.
  */
 async function loadVideos() {
     try {
-        // Try Flask API first (for local development)
-        let response;
-        try {
-            response = await fetch('/api/videos');
-            if (!response.ok) throw new Error('API not available');
-        } catch (apiError) {
-            // Fallback to static JSON (for GitHub Pages deployment)
-            console.log('API not available, loading from static JSON');
-            response = await fetch('videos.json');
-        }
-
+        const response = await fetch('videos.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`videos.json: HTTP ${response.status}`);
         videos = await response.json();
         filteredVideos = [...videos];
 
@@ -38,12 +30,12 @@ async function loadVideos() {
             initPlayer(videos[0].video_id);
         } else {
             document.getElementById('videoList').innerHTML =
-                '<div class="loading">No videos available. Please run the main HappyTube script first.</div>';
+                '<div class="loading">No videos available yet.</div>';
         }
     } catch (error) {
         console.error('Error loading videos:', error);
         document.getElementById('videoList').innerHTML =
-            '<div class="loading">Error loading videos. Make sure videos.json exists.</div>';
+            '<div class="loading">Error loading videos. Please try again later.</div>';
     }
 }
 
@@ -130,7 +122,7 @@ function renderVideoList() {
              data-index="${index}"
              onclick="playVideo(${index})">
             <div class="video-item-title">${escapeHtml(video.title)}</div>
-            <div class="video-item-channel">${escapeHtml(video.channel_title)}</div>
+            <div class="video-item-channel">${escapeHtml(video.channel_name)}</div>
         </div>
     `).join('');
 }
@@ -157,7 +149,7 @@ function playVideo(index) {
 function updateVideoInfo(index) {
     const video = filteredVideos[index];
     document.getElementById('videoTitle').textContent = video.title;
-    document.getElementById('channelTitle').textContent = video.channel_title;
+    document.getElementById('channelTitle').textContent = video.channel_name;
     document.getElementById('videoDescription').textContent = video.description || 'No description available';
 
     // Update previous/next button states
@@ -210,7 +202,7 @@ function filterVideos(searchTerm) {
         filteredVideos = videos.filter(video =>
             video.title.toLowerCase().includes(term) ||
             video.description.toLowerCase().includes(term) ||
-            video.channel_title.toLowerCase().includes(term)
+            video.channel_name.toLowerCase().includes(term)
         );
     }
 

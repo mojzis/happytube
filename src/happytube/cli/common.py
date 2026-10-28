@@ -1,6 +1,6 @@
 """Pieces shared by the ``channels``, ``trusted`` and ``serve`` commands: the
-``--channels-dir`` and ``--json`` options, JSON and plain-line output, the
-store-error wrapper and the YouTube client from ``YTKEY``."""
+``--channels-dir``, ``--stages-dir`` and ``--json`` options, JSON and plain-line
+output, the store-error wrapper and the YouTube client from ``YTKEY``."""
 
 import json
 from collections.abc import Callable
@@ -30,6 +30,16 @@ channels_dir_option = click.option(
     default=PROJECT_ROOT / "channels",
     show_default="channels/ at repo root",
     help="Registry directory (env: HAPPYTUBE_CHANNELS_DIR).",
+)
+
+stages_dir_option = click.option(
+    "--stages-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    envvar="HAPPYTUBE_STAGES_DIR",
+    default=Path("stages"),
+    show_default="stages/ in the current directory",
+    help="Stage data directory; the player reads its trusted/ "
+    "(env: HAPPYTUBE_STAGES_DIR).",
 )
 
 
