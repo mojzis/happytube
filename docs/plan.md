@@ -29,7 +29,7 @@ Then the existing pipeline fetches only from approved channels.
 | 1 ✅ | Channel registry | Data model + files for channels (`candidate` / `approved` / `rejected`, kind, language, ids) and review records (reviewer, role human/agent, verdict, notes, timestamp). CLI: `channels add / list / show / review` with `--json`. Seed with the starter candidates from the idea doc. |
 | 2 ✅ | Channel evidence | Resolve handles → channel ids (`channels.list`), collect stats + recent uploads (RSS and/or `playlistItems`), video durations; cached per channel. Research note + decision record comparing fetch methods with quota math for 50/200/500 channels. |
 | 3 ✅ | Agent vetting | Claude vets a channel from its evidence with the calm/happy rubric → markdown vet report + an agent review record. Video-level assessment reuses the same rubric. CLI: `channels vet <id>`. |
-| 4 | Web review UI | FastAPI + htmx app (decision 0006): Jinja2 pages over `ChannelStore` — channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records. Local only, `happytube serve` (decision 0007). |
+| 4 ✅ | Web review UI | FastAPI + htmx app (decision 0006): Jinja2 pages over `ChannelStore` — channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records. Local only, `happytube serve` (decision 0007). |
 | 5 | Trusted fetch | Fetch stage pulls new videos only from approved channels (method from phase 2's decision), skips Shorts, feeds assess/enhance/report/player. Video review queue + video review records in the review UI (moved from phase 4). Also: fetch must fail loudly on network/parse errors (today a catch-all exits 0); web player/export read `stages/` instead of legacy `data/fetched/`; the player moves from Flask to the FastAPI app and `flask` is dropped. |
 
 Later (not scheduled): discovery from directories (EAZA/AZA, park services, museums),
@@ -106,3 +106,16 @@ branch; merge only after the user says so.
 - Cosmetic: "did not parse (1 problems)"; store imports private `_iso_z`.
 - Run-to-run variance of per-video scores (zoo-praha 45 vs 39/50 suitable on the
   same snapshot): phase 5 should not treat one vet's video scores as final.
+
+## Backlog (from phase 4, not scheduled)
+
+- V1: `serve --host 0` slips past the wildcard check (`ipaddress` rejects '0',
+  getaddrinfo binds 0.0.0.0); resolve the host and refuse unspecified addresses.
+- Q3: in an installed wheel the default `--channels-dir` points into the venv
+  (`PROJECT_ROOT`); same root cause as the `data_root` item above.
+- Name sort ignores Czech collation (ČT sorts with C).
+- One broken registry file makes the whole queue a 500 (by design, 0007); a
+  per-row error would let the rest be reviewed.
+- vulture ignores for FastAPI decorators / QueueSections fields are global names;
+  a whitelist file would be tighter.
+- Port probe before uvicorn has a tiny race (uvicorn's own error still covers it).
