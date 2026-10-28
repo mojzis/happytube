@@ -27,3 +27,27 @@ Orchestrator pre-checks: baseline 498 passed / 85%.
 - deviations: `--watched` required in CLI; StageRecord.body; queue skips assess
   files lacking snapshot fields; plain iframe embed; DEPLOYMENT.md paths fixed.
 - unresolved: bad assess file warned twice in queue (cosmetic).
+
+## 2 — review (verdict: fix)
+- R1 medium: shown video whose assess lacks snapshot fields is missing from the
+  queue and 404s → unreviewable, unhideable (orchestrator item confirmed).
+- R2 medium: `load_yaml` catches only YAMLError; non-UTF-8 file / dir named x.yaml
+  → unhandled 500 on /videos and /player/videos.json.
+- R3 low: snapshot taken at POST time, not from the page seen (rescore race).
+- R4 low: "rescored since" logic duplicated in template and `assess_changed`.
+- R5 low: ChannelStoreError alias makes the channel handler catch video errors.
+- R6 low: private helpers imported across packages; records.py depends on
+  channels.models.
+- R7 low: Jinja video_id test regex ≠ `is_video_id`.
+- R8 low: test_bad_host_refused uses the repo's real video-reviews/.
+- preexisting: undecodable channel review file crashes channel_statuses.
+
+## 2 — QA (verified: true)
+- numbers: 594 passed / 87%, poe check green.
+- Q1 medium (= R2): non-UTF-8 review / dir named *.yaml → 500s on /videos,
+  /player/videos.json; export traceback.
+- Q2 low: `videos` CLI prints warnings twice (same root as dev's note / R1).
+- Q3 low: `videos show` prints raw microsecond timestamps; UI formats them.
+- all seeded scenarios, guard, bad ids, CLI JSON, missing dir, CI sim: pass.
+- preexisting: header-less POST accepted (by design); reviews dir default is repo
+  root while stages is cwd (same convention as channels).
