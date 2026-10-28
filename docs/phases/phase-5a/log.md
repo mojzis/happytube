@@ -86,3 +86,23 @@ dry-run OK; frontmatter fields complete, Czech + emoji round-trip; idempotent.
   set".
 - preexisting: MarkdownFile.save without allow_unicode (Czech escaped in files);
   daily_run.sh hardcodes HAPPYTUBE_DIR=/home/user/happytube; legacy stages ~20% cov.
+
+## 3 — fix
+Commits 72e865d..5ab4997 (4). 456 passed, coverage 82%, poe check green.
+
+- R1: `TrustedStage.load_until()` + `stages.pending()`; assess/enhance pick up every
+  pending file ≤ `--date`, output under the fetch file's date; `--force` only
+  `--date`. `run` continues past per-channel / per-batch errors (exit 1, "Some items
+  failed in <steps>"), chain ends only on aborted. Tests incl. review's repro. 0009,
+  CLAUDE.md, architecture updated.
+- R2 (Q1): suitable:false deletes enhance files (all dates), `unenhanced` in result.
+- R3: run builds both clients before fetch; no Claude key → exit 1, nothing fetched.
+- R4: `is_video_id()`; bad id → unreadable, not written.
+- R5: Usage model in claude.py, VetUsage alias; 13 committed vet files load.
+- R6: `cli/common.py` (shared options and helpers) used by channels, trusted, serve.
+- Q2: not_fetched carry channel_id. Q3: slugs validated before YTKEY.
+- Promoted: MarkdownFile allow_unicode; daily_run.sh HAPPYTUBE_DIR defaults to repo.
+- deviations: same id fetched on two dates → processed once (earliest, or target
+  under --force); `skipped` counts only target date; fetch_trusted(channels, …).
+- unresolved: re-scored-suitable video keeps old enhance file with stale scores in
+  frontmatter (readers should take scores from assess).
