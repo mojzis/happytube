@@ -7,11 +7,11 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from http import HTTPStatus
-from pathlib import Path
 
 import pandas as pd
 import requests
 
+from happytube.paths import LEGACY_FETCHED_DIR
 from happytube.utils import determine_text_script
 
 REQUEST_TIMEOUT_S = 30
@@ -40,10 +40,10 @@ class YtQuery:
 
     def store_locally(self):
         current_time = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M")
-        out_dir = Path("data/fetched") / self.name
+        out_dir = LEGACY_FETCHED_DIR / self.name
         out_dir.mkdir(parents=True, exist_ok=True)
-        file_path = f"{out_dir}/{current_time}_{self.variant}.json"
-        with Path(file_path).open("w") as f:
+        file_path = out_dir / f"{current_time}_{self.variant}.json"
+        with file_path.open("w") as f:
             json.dump(self.data, f, indent=4)
         return file_path
 
