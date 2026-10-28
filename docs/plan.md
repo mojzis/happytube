@@ -37,8 +37,8 @@ featured-channel one-hop expansion, blocklist, per-person channel lists / distri
 
 ## Per-phase loop
 
-Runner skill is not chosen yet (the user may write a new one); phase 0's learnings
-feed its design. Until then the orchestrating session runs:
+Runner: manual, driven by the user (decided 2026-10-28); a skill may come later,
+with `docs/process-learnings.md` as input. The orchestrating session runs:
 
 1. **dev** subagent — builds the deliverable, commits (hooks must pass).
 2. **review** subagent (`python-review` skill) and **QA** subagent (functional checks,

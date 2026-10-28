@@ -15,16 +15,20 @@ _Updated 2026-10-28._
 
 ## Next step
 
-1. User: review branch, push + PR/merge `phase-0-template`.
-2. Decide the runner (new skill vs. manual loop as in phase 0).
-3. Start **phase 1 — channel registry**: write `docs/phases/phase-1/context.md`
+1. Start **phase 1 — channel registry**: write `docs/phases/phase-1/context.md`
    (data model for channels + review records, file layout, CLI `channels
    add/list/show/review --json`, seed list from the idea doc), then run the loop.
 
+## Decided (2026-10-28)
+
+- Phase 0 merged to `main` (PR from `phase-0-template`).
+- Runner: manual for now — the user drives the loop from the session, same steps as
+  phase 0 (`docs/plan.md` → Per-phase loop). No runner skill yet.
+- Phase 1 layout: **one file per channel** (merge-friendly; people and agents write
+  concurrently).
+
 ## Open decisions
 
-- Runner skill for the per-phase loop.
-- Phase 1 file layout: one YAML per channel (`channels/<id>.yaml`) vs one
-  `config/channels.yaml` + per-channel review files. Leaning per-channel files
-  (merge-friendly, agents and humans write concurrently).
+- Phase 1: exact per-channel file shape (YAML with embedded review list vs. channel
+  YAML + separate review files) — settle in phase 1 context.md.
 - Allowlist only, or also blocklist (idea doc open question).
