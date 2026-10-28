@@ -38,9 +38,24 @@ def test_get_stores_items_on_success():
 def test_get_raises_without_leaking_key_on_http_error():
     query = Search(key="secret-key")
     with (
-        patch("happytube.videos.requests.get", return_value=_response(403)),
-        pytest.raises(YouTubeAPIError, match="403") as excinfo,
+        patch(
+            "happytube.videos.requests.get",
+            return_value=_response(403, {"error": {"message": "quotaExceeded"}}),
+        ),
+        pytest.raises(
+            YouTubeAPIError, match="403 Forbidden - quotaExceeded"
+        ) as excinfo,
     ):
         query.get()
     assert "secret-key" not in str(excinfo.value)
     assert query.data == []
+
+
+def test_get_error_without_json_body_keeps_status():
+    response = _response(500)
+    response.json.side_effect = ValueError("not json")
+    with (
+        patch("happytube.videos.requests.get", return_value=response),
+        pytest.raises(YouTubeAPIError, match=r"500 Forbidden$"),
+    ):
+        Search(key="k").get()

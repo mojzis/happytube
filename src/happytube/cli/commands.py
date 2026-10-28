@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+from collections.abc import Callable
 from datetime import date
 from functools import wraps
 from pathlib import Path
@@ -95,13 +96,22 @@ def load_youtube_config(category: str) -> dict[str, Any]:
     return youtube_search.get("params", {})
 
 
+RUN_ALL_STAGE_COUNT = 4
+
+
 def _run_stage(
-    step: int, title: str, stage: Stage, target_date: date
+    step: int, title: str, make_stage: Callable[[], Stage], target_date: date
 ) -> dict[str, Any]:
-    """Print the run-all stage header, then run ``stage`` for ``target_date``."""
-    console.print(f"\n[bold blue]Stage {step}/4: {title}[/bold blue]")
+    """Print the run-all stage header, then build and run the stage.
+
+    The stage is built after the header so its setup output (e.g. the
+    YouTube config message) appears under the right stage.
+    """
+    console.print(
+        f"\n[bold blue]Stage {step}/{RUN_ALL_STAGE_COUNT}: {title}[/bold blue]"
+    )
     console.print("=" * 60)
-    return asyncio.run(stage.run(target_date))
+    return asyncio.run(make_stage().run(target_date))
 
 
 @click.group()
@@ -409,16 +419,20 @@ def run_all(
     )
 
     try:
-        fetch_stage = FetchStage(
-            youtube_config=load_youtube_config(category), max_videos=max_videos
+        fetch_result = _run_stage(
+            1,
+            "Fetch",
+            lambda: FetchStage(
+                youtube_config=load_youtube_config(category), max_videos=max_videos
+            ),
+            target_date,
         )
-        fetch_result = _run_stage(1, "Fetch", fetch_stage, target_date)
         if fetch_result.get("new_videos", 0) == 0:
             console.print("[yellow]⚠ No videos fetched, stopping pipeline[/yellow]")
             return
         console.print(f"[green]✓ Fetched {fetch_result['new_videos']} videos[/green]\n")
 
-        assess_result = _run_stage(2, "Assess", AssessStage(), target_date)
+        assess_result = _run_stage(2, "Assess", AssessStage, target_date)
         if assess_result.get("assessed_videos", 0) == 0:
             console.print(
                 "[yellow]⚠ No videos assessed, skipping remaining stages[/yellow]"
@@ -429,13 +443,17 @@ def run_all(
             f"(avg: {assess_result.get('avg_happiness', 0)}/5)[/green]\n"
         )
 
-        enhance_stage = EnhanceStage(happiness_threshold=threshold)
-        enhance_result = _run_stage(3, "Enhance", enhance_stage, target_date)
+        enhance_result = _run_stage(
+            3,
+            "Enhance",
+            lambda: EnhanceStage(happiness_threshold=threshold),
+            target_date,
+        )
         console.print(
             f"[green]✓ Enhanced {enhance_result['enhanced_videos']} videos[/green]\n"
         )
 
-        report_result = _run_stage(4, "Report", ReportStage(), target_date)
+        report_result = _run_stage(4, "Report", ReportStage, target_date)
         console.print(
             "[green]✓ Generated report for "
             f"{report_result['videos_reported']} videos[/green]\n"

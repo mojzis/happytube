@@ -1,7 +1,6 @@
 import csv
 import html
 import json
-import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -16,16 +15,25 @@ from happytube.utils import determine_text_script
 
 REQUEST_TIMEOUT_S = 30
 
-logger = logging.getLogger(__name__)
-
 
 class YouTubeAPIError(RuntimeError):
     """A YouTube Data API request returned a non-200 response."""
 
-    def __init__(self, endpoint: str, status_code: int, reason: str):
+    def __init__(self, endpoint: str, status_code: int, reason: str, detail: str = ""):
         # Deliberately no URL: it carries the API key as a query parameter.
-        super().__init__(f"YouTube {endpoint} request failed: {status_code} {reason}")
+        message = f"YouTube {endpoint} request failed: {status_code} {reason}"
+        if detail:
+            message += f" - {detail}"
+        super().__init__(message)
         self.status_code = status_code
+
+
+def _api_error_detail(response: requests.Response) -> str:
+    """Return the ``error.message`` of a YouTube error body, or ``""``."""
+    try:
+        return str(response.json()["error"]["message"])
+    except (ValueError, KeyError, TypeError):
+        return ""
 
 
 @dataclass
@@ -46,13 +54,12 @@ class YtQuery:
         """Run the request and store its ``items``; raise on any non-200 reply."""
         response = requests.get(self.url, params=self.params, timeout=REQUEST_TIMEOUT_S)
         if response.status_code != HTTPStatus.OK:
-            logger.error(
-                "YouTube %s request failed: HTTP %s %s",
+            raise YouTubeAPIError(
                 self.name,
                 response.status_code,
-                response.text[:500],
+                response.reason,
+                _api_error_detail(response),
             )
-            raise YouTubeAPIError(self.name, response.status_code, response.reason)
         self.data = response.json()["items"]
 
     def store_locally(self):
