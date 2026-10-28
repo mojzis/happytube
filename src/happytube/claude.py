@@ -13,9 +13,7 @@ from functools import cache
 
 import anthropic
 from anthropic.types.beta import BetaContentBlock, BetaJSONOutputFormatParam
-from pydantic import BaseModel, ValidationError
-
-from happytube.channels.models import VetUsage
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 MODEL = "claude-opus-5-5"
 # Claude Opus 5.5 list prices, USD per million tokens. Estimates only: input is
@@ -31,8 +29,14 @@ _STOPPING_TYPES = frozenset(
 )
 _STOPPING_STATUS = frozenset({401, 402, 403})
 
-# Token counts of one call (cache writes and reads included in ``input_tokens``).
-Usage = VetUsage
+
+class Usage(BaseModel):
+    """Tokens one call used (input includes any cache reads and writes)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
 
 
 def estimate_usd(input_tokens: int, output_tokens: int) -> float:

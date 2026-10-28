@@ -17,14 +17,14 @@ from pydantic import ValidationError
 
 from happytube.channels.store import ChannelStore
 from happytube.claude import ClaudeCaller
-from happytube.cli.channels import (
-    _echo_json,
-    _print_lines,
-    _store_errors_as_click,
-    _with_message,
+from happytube.cli.common import (
     channels_dir_option,
+    echo_json,
     json_option,
     make_youtube_client,
+    print_lines,
+    store_errors_as_click,
+    with_message,
 )
 from happytube.config.settings import AnthropicSettings
 from happytube.trusted.assess import assess_trusted
@@ -111,7 +111,7 @@ def _fetch_lines(run: FetchRun) -> list[str]:
                 + (f", {r.unreadable} unreadable" if r.unreadable else "")
                 + ")"
             )
-        out.append(_with_message(text, r.message))
+        out.append(with_message(text, r.message))
     return [*out, f"new videos: {run.new}, quota units used: {run.quota_units}"]
 
 
@@ -123,7 +123,7 @@ def _item_lines(run: ItemRun, verb: str) -> list[str]:
             text += f", {r.suitable} suitable"
         if r.model and r.status == "done":
             text += f" ({r.model})"
-        out.append(_with_message(text, r.message))
+        out.append(with_message(text, r.message))
     out.append(f"already {verb}: {run.skipped}")
     out.append(
         "dry run: no calls, no files"
@@ -148,9 +148,9 @@ def _finish(
     run: FetchRun | ItemRun, as_json: bool, lines: Callable[[], list[str]]
 ) -> None:
     if as_json:
-        _echo_json(run.as_dict())
+        echo_json(run.as_dict())
     else:
-        _print_lines(lines())
+        print_lines(lines())
     if problem := _failure(run, as_json):
         raise click.ClickException(problem)
 
@@ -166,7 +166,7 @@ def _claude(dry_run: bool) -> Callable[[], ClaudeCaller] | None:
 @max_per_channel_option
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def fetch_command(  # noqa: PLR0913 - one parameter per CLI option
     store: ChannelStore,
     slugs: tuple[str, ...],
@@ -231,7 +231,7 @@ def enhance_command(
 @max_per_channel_option
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def run_command(
     store: ChannelStore,
     target_date: date,
@@ -263,9 +263,9 @@ def run_command(
     for name, run, _ in chain:
         steps[name] = run.as_dict()
     if as_json:
-        _echo_json(steps)
+        echo_json(steps)
     else:
-        _print_lines([f"{name}: {line}" for name, _, lines in chain for line in lines])
+        print_lines([f"{name}: {line}" for name, _, lines in chain for line in lines])
     name, last, _ = chain[-1]
     if problem := _failure(last, as_json):
         msg = f"{name} failed, chain stopped. {problem}"
@@ -279,7 +279,7 @@ def status_command(target_date: date, as_json: bool) -> None:
     """Videos fetched, assessed, suitable and enhanced on the date, per channel."""
     counts = status_counts(target_date)
     if as_json:
-        _echo_json(counts)
+        echo_json(counts)
         return
     rows = [
         f"{c['slug']}: fetched {c['fetched']}, assessed {c['assessed']}, "
@@ -291,4 +291,4 @@ def status_command(target_date: date, as_json: bool) -> None:
         f"total {counts['date']}: fetched {t['fetched']}, assessed {t['assessed']}, "
         f"suitable {t['suitable']}, enhanced {t['enhanced']}"
     )
-    _print_lines(rows)
+    print_lines(rows)

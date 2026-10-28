@@ -11,7 +11,7 @@ from pathlib import Path
 import click
 
 from happytube.channels.store import ChannelStore
-from happytube.cli.channels import channels_dir_option
+from happytube.cli.common import channels_dir_option
 
 
 def _check_port_free(host: str, port: int) -> None:

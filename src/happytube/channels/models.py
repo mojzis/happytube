@@ -7,6 +7,7 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from happytube.claude import Usage
 from happytube.rubric import Flag, Score
 
 Kind = Literal["broadcaster", "zoo", "aquarium", "park", "museum", "other"]
@@ -177,13 +178,9 @@ ChannelFlag = Literal["unresolved", "inactive", "mostly_shorts", "identity_doubt
 IdentityMatch = Literal["yes", "no", "unsure"]
 
 
-class VetUsage(BaseModel):
-    """Tokens one vet call used (input includes any cache reads and writes)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    input_tokens: int = Field(ge=0)
-    output_tokens: int = Field(ge=0)
+# Tokens one vet call used; the shared ``happytube.claude.Usage`` (vet YAML
+# unchanged: the same two fields).
+VetUsage = Usage
 
 
 class VetVideo(BaseModel):
