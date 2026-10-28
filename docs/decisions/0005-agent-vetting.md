@@ -29,6 +29,9 @@ status (0003). Per-video scores should be reusable by video assessment in phase 
   than 5 long-form videos). `identity_doubt` is added when the model's
   `identity_match` is not `yes` (it compares the registry entry with the snapshot's
   title, custom URL, description, country and subscribers — look-alikes, 0004).
+- **Rejected channels are not vetted.** A channel whose derived status is
+  `rejected` (the human blocklist, 0003) is `skipped_rejected`: no call, no files,
+  also in `--dry-run`. Agent reviews never cause this. `evidence` is unchanged.
 - **Verdict rule** (code): the model's `approve` becomes `unsure` when `inactive`,
   `mostly_shorts` or `identity_doubt` is set; `reject` and `unsure` pass through.
   The report keeps both `verdict` (final) and `model_verdict`.
@@ -51,18 +54,30 @@ status (0003). Per-video scores should be reusable by video assessment in phase 
   Nothing is overwritten.
 - **Model and SDK** — `claude-opus-5-5`, adaptive thinking (its default; `thinking`
   is not sent), `output_config.effort: medium`, structured output through
-  `client.beta.messages.parse(output_format=VetOutput)` with the server-side refusal
-  fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). The
-  beta namespace is needed for `fallbacks`. `stop_reason == "refusal"` is checked
-  before reading output: a refused channel is `refused`, nothing written. `anthropic`
-  is on the newest 1.x (1.17.0); 2.x (API version `2026-10-21`) is a later step.
+  `client.beta.messages.create` with `output_config.format` = a `json_schema` built
+  from `VetOutput` (`anthropic.transform_schema`), and the server-side refusal
+  fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`; the beta
+  namespace is needed for `fallbacks`). Not `messages.parse`: it validates before
+  returning, so `stop_reason` and usage were lost when the output did not fit. The
+  order is: `stop_reason == "refusal"` → `refused` (with its category);
+  `max_tokens` → `error` naming the cut-off; then
+  `VetOutput.model_validate_json` on the answer text (text after the last
+  `fallback` block) — failing that (e.g. a score outside 1–5) → `error`. Nothing is
+  written on any of these, but their tokens are recorded. `anthropic` is on the
+  newest 1.x (1.17.0); 2.x (API version `2026-10-21`) is a later step.
+- **Answering model** — the report's `model` and the per-channel result carry
+  `response.model`, the model that actually answered (the fallback may differ from
+  the requested `claude-opus-5-5`); the run JSON names the request
+  `requested_model`.
 - **Run safety** — an authentication, permission or billing error stops the run
   (later channels `not_vetted`), keeping files already written; rate limits and 5xx
   are retried by the SDK and then become a per-channel `error`. Messages carry the
   API's error type and text, never headers or the key. `--dry-run` makes no call,
   needs no key and writes nothing.
-- **Cost** is reported per channel and in total from the response usage, at Opus 5.5
-  list prices ($4 / $20 per million input / output tokens; one constant each).
+- **Cost** is reported per channel and in total from the response usage of every
+  call that got a response (refused and unusable ones too), as an estimate at Opus
+  5.5 list prices ($4 / $20 per million input / output tokens; one constant each)
+  even when a fallback model answered.
 - Code: `happytube/rubric.py`, `channels/vet.py` (pure: flags, prompt, verdict rule,
   report), `channels/vet_run.py` (`AnthropicVetClient`, `vet_channels`),
   `ChannelStore.add_vet` / `vets` / `latest_vet`, CLI `channels vet`; `list` and
@@ -77,6 +92,5 @@ status (0003). Per-video scores should be reusable by video assessment in phase 
   asks the model to score lower when in doubt.
 - Each vet costs money (roughly 50 videos of text per channel); the skip-when-current
   rule keeps re-runs cheap. Changing the prompt means bumping `prompt_version`, and
-  `--force` to re-vet.
-- A mid-response refusal that leaves unparseable text surfaces as an `error`
-  (parse fails before `stop_reason` can be read), not as `refused`.
+  `--force` to re-vet: the skip rule looks only at the snapshot, so old vets stay
+  "current" after a prompt or model change (`vet --help` says so).

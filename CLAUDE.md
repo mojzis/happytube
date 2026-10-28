@@ -58,7 +58,7 @@ happytube channels vet [SLUG…] [--all] [--force] [--dry-run] [--json]  # needs
 ```
 
 Only `resolve` and `evidence` call YouTube (`YTKEY` only, no Anthropic key); the rest
-need no keys. `resolve` fills a null `channel_id` from the handle (`forHandle`, 1
+except `vet` need no keys. `resolve` fills a null `channel_id` from the handle (`forHandle`, 1
 unit) and skips channels that have one; `--verify` re-checks those, and a different
 id is a `mismatch`, never overwritten. `evidence` resolves where needed, then writes
 an append-only snapshot per channel (~3 units each; Shorts = membership of the
@@ -76,10 +76,12 @@ approve/reject decides; agent reviews never change it; `rejected` is the blockli
 judges the latest snapshot — identity, plus calm/happy per long-form video (Shorts
 are never scored) — and `vet` writes `vet/<stamp>.md` and an agent review
 (`claude-vet`, status unchanged). Flags `inactive`, `mostly_shorts`, `identity_doubt`
-turn a model approve into `unsure`; `unresolved` channels are skipped without a
-call. A channel whose latest vet used its latest snapshot is `skipped_current`
-unless `--force`. It reports tokens and estimated cost; a rejected key, missing
-permission or no credit stops the run (`not_vetted` for the rest).
+turn a model approve into `unsure`; `unresolved` and human-`rejected` channels are
+skipped without a call. A channel whose latest vet used its latest snapshot is
+`skipped_current` unless `--force` (also needed after a prompt or model change). It
+reports tokens and an estimated cost (at Opus 5.5 rates, failed calls included); a
+rejected key, missing permission or no credit stops the run (`not_vetted` for the
+rest).
 
 ### Web player
 
