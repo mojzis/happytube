@@ -25,8 +25,9 @@ import yaml
 from pydantic import AwareDatetime, BaseModel, StrictBool, ValidationError
 
 from happytube.channels.models import Status
-from happytube.channels.store import ChannelStore, ChannelStoreError, derive_status
+from happytube.channels.store import ChannelStore, derive_status
 from happytube.models.markdown import MarkdownFile
+from happytube.records import StoreError
 from happytube.trusted.stages import TrustedStage, is_video_id
 from happytube.trusted.video_reviews import VideoReviewStore, hidden_ids
 
@@ -168,7 +169,7 @@ def channel_statuses(store: ChannelStore) -> dict[str, Status]:
     for slug in store.slugs():
         try:
             statuses[slug] = derive_status(store.reviews(slug))
-        except ChannelStoreError as e:
+        except StoreError as e:
             logger.warning("Hiding channel %s: %s", slug, e)
     return statuses
 

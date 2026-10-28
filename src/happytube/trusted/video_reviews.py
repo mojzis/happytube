@@ -32,7 +32,7 @@ from pydantic import (
     field_validator,
 )
 
-from happytube.channels.models import Role, _as_utc, _iso_z, _now
+from happytube.channels.models import Role
 from happytube.paths import PROJECT_ROOT
 from happytube.records import (
     StoreError,
@@ -43,6 +43,7 @@ from happytube.records import (
 )
 from happytube.rubric import Flag
 from happytube.trusted.stages import is_video_id
+from happytube.utils import as_utc, iso_z, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class VideoReview(BaseModel):
     flags: list[Flag] = Field(default_factory=list)
     watched: Watched
     notes: str | None = None
-    created_at: datetime = Field(default_factory=_now)
+    created_at: datetime = Field(default_factory=utc_now)
     # The agent's call this review was compared with, from the assess file.
     agent_suitable: StrictBool
     rubric_version: int = Field(ge=1)
@@ -78,11 +79,11 @@ class VideoReview(BaseModel):
     @field_validator("created_at", "assessed_at")
     @classmethod
     def _times_utc(cls, value: datetime) -> datetime:
-        return _as_utc(value)
+        return as_utc(value)
 
     @field_serializer("created_at", "assessed_at")
     def _dump_times(self, value: datetime) -> str:
-        return _iso_z(value)
+        return iso_z(value)
 
     @property
     def disagrees(self) -> bool:

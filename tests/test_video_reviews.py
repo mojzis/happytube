@@ -5,6 +5,7 @@ import logging
 import pytest
 import yaml
 
+from happytube.records import StoreError
 from happytube.trusted.video_reviews import (
     NO_REVIEWS,
     ReviewState,
@@ -14,7 +15,7 @@ from happytube.trusted.video_reviews import (
     agreement,
     hidden_ids,
 )
-from tests.player_helpers import vid, vreview
+from tests.player_helpers import UNREADABLE, make_unreadable, vid, vreview
 
 
 @pytest.fixture
@@ -118,6 +119,16 @@ def test_malformed_file_hides_with_warning(store, caplog):
     assert str(bad) in caplog.text
     assert "not-an-id" in caplog.text
     assert states[vid(1)].error is not None
+
+
+@pytest.mark.parametrize("kind", UNREADABLE)
+def test_unreadable_file_is_a_store_error_naming_it(store, kind):
+    path = store.root / vid(1) / "20261028T130000Z-x.yaml"
+    make_unreadable(path, kind)
+    with pytest.raises(StoreError, match=str(path)):
+        store.reviews(vid(1))
+    state = store.states()[vid(1)]
+    assert (state.hidden, str(path) in (state.error or "")) == (True, True)
 
 
 def test_agreement_uses_snapshot_and_latest_human():

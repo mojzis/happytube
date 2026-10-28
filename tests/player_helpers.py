@@ -71,3 +71,15 @@ def vreview(verdict="suitable", role="human", minutes=0, agent=True, **over):
         "assessed_at": T0 - timedelta(days=1),
     }
     return VideoReview.model_validate(fields | over)
+
+
+UNREADABLE = ("not_utf8", "directory")
+
+
+def make_unreadable(path: Path, kind: str) -> Path:
+    """A ``.yaml`` record that cannot be read: not UTF-8, or a directory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    {"not_utf8": lambda: path.write_bytes(b"verdict: \xff\n"), "directory": path.mkdir}[
+        kind
+    ]()
+    return path

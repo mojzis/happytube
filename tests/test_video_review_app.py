@@ -9,7 +9,9 @@ from happytube.review.app import create_app
 from happytube.trusted.video_reviews import VideoReviewStore
 from tests.player_helpers import (
     PLAYER_JSON,
+    UNREADABLE,
     assess_fm,
+    make_unreadable,
     review_store,
     vid,
     vreview,
@@ -92,6 +94,17 @@ def test_queue_marks_an_unreadable_review(setup):
     response = client.get(VIDEOS)
     assert response.status_code == 200
     assert "unreadable review" in response.text
+    assert shown(client) == [vid(3)]
+
+
+@pytest.mark.parametrize("kind", UNREADABLE)
+def test_undecodable_review_hides_and_queue_renders(setup, kind):
+    client, reviews = setup
+    bad = reviews.root / vid(1) / "20261028T120000Z-x.yaml"
+    make_unreadable(bad, kind)
+    response = client.get(VIDEOS)
+    assert (response.status_code, "unreadable review" in response.text) == (200, True)
+    assert client.get(PLAYER_JSON).status_code == 200
     assert shown(client) == [vid(3)]
 
 
@@ -210,7 +223,11 @@ def test_cross_site_post_refused(setup):
 
 
 def test_bad_host_refused(tmp_path):
-    app = create_app(ChannelStore(tmp_path), default_reviewer=None)
+    app = create_app(
+        ChannelStore(tmp_path),
+        default_reviewer=None,
+        video_reviews=review_store(tmp_path),
+    )
     client = TestClient(app, base_url="http://evil.example")
     assert client.get(VIDEOS).status_code == 400
 

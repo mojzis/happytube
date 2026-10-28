@@ -16,6 +16,7 @@ from happytube.channels.vet import (
     render_report,
     review_for,
 )
+from happytube.records import StoreError
 from happytube.rubric import FLAGS, is_suitable
 from tests.vet_helpers import (
     FETCHED_AT,
@@ -303,7 +304,7 @@ def test_unknown_key_in_vet_frontmatter_is_refused(store):
         path.read_text(encoding="utf-8").replace("---\n", "---\nextra: 1\n", 1),
         encoding="utf-8",
     )
-    with pytest.raises(ChannelStoreError, match="extra"):
+    with pytest.raises(StoreError, match="extra"):
         store.vets(channel.slug)
 
 

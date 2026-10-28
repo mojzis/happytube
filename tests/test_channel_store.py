@@ -4,7 +4,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from happytube.channels.models import Channel, Review, slugify
+from happytube.channels.models import Channel, Review
 from happytube.channels.store import (
     ChannelExistsError,
     ChannelNotFoundError,
@@ -13,6 +13,8 @@ from happytube.channels.store import (
     derive_status,
     filter_entries,
 )
+from happytube.records import StoreError
+from happytube.utils import slugify
 
 T0 = datetime(2026, 10, 28, 10, 15, tzinfo=UTC)
 
@@ -210,7 +212,7 @@ def test_absolute_path_slug_is_refused(store, tmp_path):
 
 def test_malformed_channel_yaml_names_the_file(store):
     path = _write(store.root / "bbc-earth" / "channel.yaml", "slug: [unclosed\n")
-    with pytest.raises(ChannelStoreError, match="invalid YAML") as exc:
+    with pytest.raises(StoreError, match="invalid YAML") as exc:
         store.get("bbc-earth")
     assert str(path) in str(exc.value)
 
@@ -218,7 +220,7 @@ def test_malformed_channel_yaml_names_the_file(store):
 def test_malformed_review_yaml_names_the_file(store):
     store.add(_channel())
     path = _write(store.root / "bbc-earth" / "reviews" / "x.yaml", "a: [b\n")
-    with pytest.raises(ChannelStoreError, match="invalid YAML") as exc:
+    with pytest.raises(StoreError, match="invalid YAML") as exc:
         store.reviews("bbc-earth")
     assert str(path) in str(exc.value)
 
@@ -226,7 +228,7 @@ def test_malformed_review_yaml_names_the_file(store):
 @pytest.mark.parametrize("text", ["- a list\n", "just a string\n", ""])
 def test_non_mapping_yaml_names_the_file(store, text):
     path = _write(store.root / "bbc-earth" / "channel.yaml", text)
-    with pytest.raises(ChannelStoreError, match="expected a YAML mapping") as exc:
+    with pytest.raises(StoreError, match="expected a YAML mapping") as exc:
         store.get_channel("bbc-earth")
     assert str(path) in str(exc.value)
 
@@ -237,7 +239,7 @@ def test_invalid_field_on_disk_names_file_and_field(store):
         path.read_text(encoding="utf-8").replace("broadcaster", "spaceship"),
         encoding="utf-8",
     )
-    with pytest.raises(ChannelStoreError, match="kind") as exc:
+    with pytest.raises(StoreError, match="kind") as exc:
         store.get_channel("bbc-earth")
     assert str(path) in str(exc.value)
 
@@ -246,7 +248,7 @@ def test_unknown_key_on_disk_is_refused(store):
     path = store.add(_channel())
     with path.open("a", encoding="utf-8") as f:
         f.write("chanel_id: UCabc\n")
-    with pytest.raises(ChannelStoreError, match="chanel_id") as exc:
+    with pytest.raises(StoreError, match="chanel_id") as exc:
         store.get_channel("bbc-earth")
     assert str(path) in str(exc.value)
 
@@ -257,7 +259,7 @@ def test_unknown_review_key_is_refused(store):
         store.root / "bbc-earth" / "reviews" / "r.yaml",
         _review_yaml("approve") + "verdikt: approve\n",
     )
-    with pytest.raises(ChannelStoreError, match="verdikt"):
+    with pytest.raises(StoreError, match="verdikt"):
         store.reviews("bbc-earth")
 
 
@@ -273,9 +275,9 @@ def test_slug_must_match_directory(store):
 def test_broken_channel_fails_entries_and_add(store):
     store.add(_channel())
     _write(store.root / "broken" / "channel.yaml", "slug: [\n")
-    with pytest.raises(ChannelStoreError, match="broken"):
+    with pytest.raises(StoreError, match="broken"):
         store.entries()
-    with pytest.raises(ChannelStoreError, match="broken"):
+    with pytest.raises(StoreError, match="broken"):
         store.add(_channel(slug="other", handle="@x"))
     assert not (store.root / "other").exists()
 

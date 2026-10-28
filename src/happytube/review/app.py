@@ -34,10 +34,10 @@ from happytube.channels.store import (
     ChannelEntry,
     ChannelNotFoundError,
     ChannelStore,
-    ChannelStoreError,
     filter_entries,
 )
 from happytube.channels.vet import long_form
+from happytube.records import StoreError
 from happytube.review.estimate import channel_watchable, watchable_estimate
 from happytube.review.pages import (
     PACKAGE_DIR,
@@ -226,8 +226,8 @@ def _install_error_handlers(app: FastAPI, pages: _Pages) -> None:
     async def no_video(request: Request, exc: VideoNotFoundError) -> Response:
         return pages.error(request, HTTPStatus.NOT_FOUND, str(exc))
 
-    @app.exception_handler(ChannelStoreError)
-    async def store_error(request: Request, exc: ChannelStoreError) -> Response:
+    @app.exception_handler(StoreError)
+    async def store_error(request: Request, exc: StoreError) -> Response:
         return pages.error(request, HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
     @app.exception_handler(StarletteHTTPException)

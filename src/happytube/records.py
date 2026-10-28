@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from happytube.channels.models import slugify
+from happytube.utils import slugify
 
 YAML_SUFFIX = ".yaml"
 _COLLISION_SUFFIX = re.compile(r"^(?P<base>.+)-(?P<n>\d+)$")
@@ -43,9 +43,23 @@ def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
 
 
-def load_yaml(path: Path) -> dict[str, Any]:
+def read_text(path: Path) -> str:
+    """A record file's text; a file that cannot be read (not UTF-8, a directory,
+    no permission) is a ``StoreError`` naming it."""
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        msg = f"{path}: not UTF-8 text: {e}"
+        raise StoreError(msg) from e
+    except OSError as e:
+        msg = f"{path}: cannot read it: {e.strerror or e}"
+        raise StoreError(msg) from e
+
+
+def load_yaml(path: Path) -> dict[str, Any]:
+    text = read_text(path)
+    try:
+        data = yaml.safe_load(text)
     except yaml.YAMLError as e:
         msg = f"{path}: invalid YAML: {e}"
         raise StoreError(msg) from e

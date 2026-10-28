@@ -1,14 +1,13 @@
 """Pydantic models for registry channels and review records."""
 
-import re
-import unicodedata
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from happytube.claude import Usage
 from happytube.rubric import Flag, Score
+from happytube.utils import as_utc, iso_z, utc_now
 
 Kind = Literal["broadcaster", "zoo", "aquarium", "park", "museum", "other"]
 Language = Literal["cs", "en"]
@@ -25,22 +24,6 @@ STATUSES: tuple[str, ...] = get_args(Status)
 SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 HANDLE_PATTERN = r"^@[\w.\-]+$"
 CHANNEL_ID_PATTERN = r"^UC[\w\-]+$"
-
-
-def _as_utc(value: datetime) -> datetime:
-    """Treat a naive datetime as UTC and convert an aware one to UTC."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
-
-
-def _iso_z(value: datetime) -> str:
-    """Format a UTC datetime as ISO-8601 with a trailing ``Z``."""
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 class Channel(BaseModel):
@@ -60,7 +43,7 @@ class Channel(BaseModel):
     channel_id: str | None = Field(default=None, pattern=CHANNEL_ID_PATTERN)
     url: str | None = None
     added_by: str = Field(min_length=1)
-    added_at: datetime = Field(default_factory=_now)
+    added_at: datetime = Field(default_factory=utc_now)
     notes: str | None = None
 
     @field_validator("languages")
@@ -71,11 +54,11 @@ class Channel(BaseModel):
     @field_validator("added_at")
     @classmethod
     def _added_at_utc(cls, value: datetime) -> datetime:
-        return _as_utc(value)
+        return as_utc(value)
 
     @field_serializer("added_at")
     def _dump_added_at(self, value: datetime) -> str:
-        return _iso_z(value)
+        return iso_z(value)
 
 
 class Review(BaseModel):
@@ -87,27 +70,16 @@ class Review(BaseModel):
     role: Role
     verdict: Verdict
     notes: str | None = None
-    created_at: datetime = Field(default_factory=_now)
+    created_at: datetime = Field(default_factory=utc_now)
 
     @field_validator("created_at")
     @classmethod
     def _created_at_utc(cls, value: datetime) -> datetime:
-        return _as_utc(value)
+        return as_utc(value)
 
     @field_serializer("created_at")
     def _dump_created_at(self, value: datetime) -> str:
-        return _iso_z(value)
-
-
-def slugify(text: str) -> str:
-    """Kebab-case ASCII slug: strip diacritics, lowercase, non-alphanumerics to ``-``.
-
-    Returns an empty string when nothing alphanumeric is left.
-    """
-    ascii_text = (
-        unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
-    )
-    return re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
+        return iso_z(value)
 
 
 EvidenceMethod = Literal["api", "rss"]
@@ -131,11 +103,11 @@ class EvidenceVideo(BaseModel):
     @field_validator("published_at")
     @classmethod
     def _published_at_utc(cls, value: datetime) -> datetime:
-        return _as_utc(value)
+        return as_utc(value)
 
     @field_serializer("published_at")
     def _dump_published_at(self, value: datetime) -> str:
-        return _iso_z(value)
+        return iso_z(value)
 
 
 class Evidence(BaseModel):
@@ -143,7 +115,7 @@ class Evidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    fetched_at: datetime = Field(default_factory=_now)
+    fetched_at: datetime = Field(default_factory=utc_now)
     method: EvidenceMethod
     channel_id: str = Field(pattern=CHANNEL_ID_PATTERN)
     title: str
@@ -167,11 +139,11 @@ class Evidence(BaseModel):
     @field_validator("fetched_at", "published_at")
     @classmethod
     def _times_utc(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _as_utc(value)
+        return None if value is None else as_utc(value)
 
     @field_serializer("fetched_at", "published_at")
     def _dump_times(self, value: datetime | None) -> str | None:
-        return None if value is None else _iso_z(value)
+        return None if value is None else iso_z(value)
 
 
 ChannelFlag = Literal["unresolved", "inactive", "mostly_shorts", "identity_doubt"]
@@ -206,7 +178,7 @@ class VetReport(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    vetted_at: datetime = Field(default_factory=_now)
+    vetted_at: datetime = Field(default_factory=utc_now)
     model: str = Field(min_length=1)
     prompt_version: int = Field(ge=1)
     evidence_at: datetime
@@ -230,8 +202,8 @@ class VetReport(BaseModel):
     @field_validator("vetted_at", "evidence_at")
     @classmethod
     def _times_utc(cls, value: datetime) -> datetime:
-        return _as_utc(value)
+        return as_utc(value)
 
     @field_serializer("vetted_at", "evidence_at")
     def _dump_times(self, value: datetime) -> str:
-        return _iso_z(value)
+        return iso_z(value)

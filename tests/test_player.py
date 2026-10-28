@@ -18,7 +18,16 @@ from happytube.trusted.player import (
 )
 from happytube.trusted.stages import TrustedStage
 from happytube.trusted.video_reviews import VideoReviewsMissingError, VideoReviewStore
-from tests.player_helpers import DAY, assess_fm, review_store, vid, vreview, write
+from tests.player_helpers import (
+    DAY,
+    UNREADABLE,
+    assess_fm,
+    make_unreadable,
+    review_store,
+    vid,
+    vreview,
+    write,
+)
 from tests.trusted_helpers import add_channel
 
 LATER = date(2026, 10, 27)
@@ -174,6 +183,17 @@ def test_channel_with_broken_reviews_is_hidden(tmp_path, caplog):
     with caplog.at_level(logging.WARNING):
         assert channel_statuses(store) == {}
     assert "zoo" in caplog.text
+
+
+@pytest.mark.parametrize("kind", UNREADABLE)
+def test_channel_with_undecodable_review_is_hidden(tmp_path, kind, caplog):
+    store = ChannelStore(tmp_path / "channels")
+    add_channel(store, "zoo", "UCzoo")
+    bad = store.root / "zoo" / "reviews" / "20990101T000000Z-x.yaml"
+    make_unreadable(bad, kind)
+    with caplog.at_level(logging.WARNING):
+        assert channel_statuses(store) == {}
+    assert str(bad) in caplog.text
 
 
 def test_missing_stage_dirs_mean_nothing_shown(tmp_path):

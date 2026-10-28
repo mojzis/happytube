@@ -29,7 +29,6 @@ from happytube.channels.models import (
     Review,
     Status,
     VetReport,
-    _iso_z,
 )
 from happytube.records import (
     StoreError,
@@ -38,11 +37,13 @@ from happytube.records import (
     load_model,
     load_records,
     load_yaml,
+    read_text,
     review_stem,
     stamp,
     validate,
     write_new,
 )
+from happytube.utils import iso_z
 
 CHANNEL_FILE = "channel.yaml"
 REVIEWS_DIR = "reviews"
@@ -52,9 +53,9 @@ MARKDOWN_SUFFIX = ".md"
 DECISIVE_VERDICTS: dict[str, Status] = {"approve": "approved", "reject": "rejected"}
 
 
-# Registry errors are the shared file-store error (``happytube.records``), so a
-# broken file is the same kind of problem in every store.
-ChannelStoreError = StoreError
+class ChannelStoreError(StoreError):
+    """A registry problem. A broken file is the shared ``StoreError`` (from
+    ``happytube.records``); catch that for "anything wrong in a store"."""
 
 
 class ChannelExistsError(ChannelStoreError):
@@ -95,7 +96,7 @@ class StoredVet:
         """Verdict, flags, scores and suitable count — no per-video detail."""
         r = self.report
         return {
-            "vetted_at": _iso_z(r.vetted_at),
+            "vetted_at": iso_z(r.vetted_at),
             "verdict": r.verdict,
             "model_verdict": r.model_verdict,
             "flags": list(r.flags),
@@ -155,7 +156,7 @@ class ChannelEntry:
                 else None
             ),
             "vetted_at": (
-                _iso_z(self.latest_vet.report.vetted_at) if self.latest_vet else None
+                iso_z(self.latest_vet.report.vetted_at) if self.latest_vet else None
             ),
             "vet_verdict": self.latest_vet.report.verdict if self.latest_vet else None,
         }
@@ -179,7 +180,7 @@ class ChannelEntry:
 
 def _read_frontmatter(path: Path) -> dict[str, Any]:
     """The YAML frontmatter mapping of a markdown file (the body is for people)."""
-    text = path.read_text(encoding="utf-8")
+    text = read_text(path)
     # The closing delimiter is a line that is exactly ``---``; inside the YAML a
     # longer dash run or an indented continuation line never matches it.
     head, sep, _body = text.removeprefix("---\n").partition("\n---\n")
@@ -308,7 +309,7 @@ class ChannelStore:
         )
 
     def entries(self) -> list[ChannelEntry]:
-        """Every channel. A broken file raises ``ChannelStoreError`` naming it:
+        """Every channel. A broken file raises ``StoreError`` naming it:
         files are the source of truth, so a broken one should be fixed, not hidden."""
         return [self.get(slug) for slug in self.slugs()]
 
