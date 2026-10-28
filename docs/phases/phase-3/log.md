@@ -64,3 +64,25 @@ unchanged. Unresolved: real-API shapes (json_schema, fallback content layout, us
 across fallbacks) unverified — key still invalid.
 
 ## 4 — verify (combined review + QA)
+Verify (verdict ship): R1–R6, Q1, Q2 resolved end to end (real SDK over httpx2
+MockTransport through the CLI). Deviations accepted. V1 low — tokens of a declined
+attempt before a fallback (usage.iterations) not counted. V2 low — text-after-last-
+fallback-block layout unverified offline; fails safe. V3 low — text output doesn't
+name the answering model. All → backlog.
+
+## 5 — orchestrator real run
+
+User fixed ANTHROPIC_API_KEY. Probe on scratch copy (zoo-praha): approve, 45/50
+suitable, 14 210 in / 4 404 out, $0.14; eyeballed: lion feeding → predation, snakes →
+scary, army aircraft → war (strict but safe), Czech handled.
+
+Committed run `vet --all`: 13 vetted, 2 skipped_unresolved (ct-decko, zoo-zlin);
+118 916 in / 45 204 out tokens, est. $1.38. Verdicts: approve — cincinnati-zoo,
+explore-org, san-diego-zoo, zoo-praha; unsure — monterey-bay-aquarium, nat-geo-kids,
+national-park-service, pbs-nature, smithsonian-channel [inactive], zoo-dvur-kralove
+[inactive, model approve]; reject — bbc-earth, bbc-earth-kids, national-geographic.
+All identity_match yes. No fallback, refusal or error.
+
+Observation: run-to-run variance — zoo-praha 45/50 suitable in the probe, 39/50 in
+the committed run (same snapshot, same prompt). Per-video scores near the
+threshold are not stable; humans judge, phase 5 should not treat one vet as final.

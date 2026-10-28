@@ -1,0 +1,8 @@
+reviewer: claude-vet
+role: agent
+verdict: approve
+notes: 'Official San Diego Zoo channel with mostly gentle, positive animal content,
+  notably a series of short elephant herd profiles. A few veterinary videos may show
+  medical procedures, and two NASCAR promotional videos are off-topic and likely loud;
+  these should be skipped. Flags: none. Report: vet/20261028T194737Z.md'
+created_at: '2026-10-28T19:47:37.928422Z'
