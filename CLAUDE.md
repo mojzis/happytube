@@ -54,10 +54,11 @@ happytube channels review bbc-earth --reviewer matous --role human \
     --verdict approve|reject|unsure [--notes …] [--json]
 happytube channels resolve [SLUG…] [--all] [--verify] [--json]  # needs YTKEY
 happytube channels evidence [SLUG…] [--all] [--max-videos 50] [--json]  # needs YTKEY
+happytube channels vet [SLUG…] [--all] [--force] [--dry-run] [--json]  # needs ANTHROPIC_API_KEY
 ```
 
 Only `resolve` and `evidence` call YouTube (`YTKEY` only, no Anthropic key); the rest
-need no keys. `resolve` fills a null `channel_id` from the handle (`forHandle`, 1
+except `vet` need no keys. `resolve` fills a null `channel_id` from the handle (`forHandle`, 1
 unit) and skips channels that have one; `--verify` re-checks those, and a different
 id is a `mismatch`, never overwritten. `evidence` resolves where needed, then writes
 an append-only snapshot per channel (~3 units each; Shorts = membership of the
@@ -69,6 +70,18 @@ can hit look-alike channels (decision 0004). `--json` prints plain JSON to stdou
 default `channels/` at the repo root. Status is derived: the latest *human*
 approve/reject decides; agent reviews never change it; `rejected` is the blocklist
 (decision 0003).
+
+`vet` (decision 0005) is the only command calling Claude; it needs only
+`ANTHROPIC_API_KEY` (`--dry-run` needs none and writes nothing). Claude Opus 5.5
+judges the latest snapshot — identity, plus calm/happy per long-form video (Shorts
+are never scored) — and `vet` writes `vet/<stamp>.md` and an agent review
+(`claude-vet`, status unchanged). Flags `inactive`, `mostly_shorts`, `identity_doubt`
+turn a model approve into `unsure`; `unresolved` and human-`rejected` channels are
+skipped without a call. A channel whose latest vet used its latest snapshot is
+`skipped_current` unless `--force` (also needed after a prompt or model change). It
+reports tokens and an estimated cost (at Opus 5.5 rates, failed calls included); a
+rejected key, missing permission or no credit stops the run (`not_vetted` for the
+rest).
 
 ### Web player
 
@@ -185,8 +198,12 @@ from the repo root.
   `channels` subgroup.
 - `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),
   `store.py` (`ChannelStore`, `derive_status`), `evidence.py` (pure API → `Evidence`
-  builder, Shorts by `UUSH` ids or duration) and `collect.py` (resolve / evidence
-  runs); the CLI and the future web UI share them.
+  builder, Shorts by `UUSH` ids or duration), `collect.py` (resolve / evidence
+  runs), `vet.py` (pure vetting: flags, prompt, verdict rule, report) and
+  `vet_run.py` (`AnthropicVetClient` behind a `VetClient` protocol, `vet_channels`);
+  the CLI and the future web UI share them.
+- `rubric.py` — calm/happy rubric, video flags, `VideoScore`, `is_suitable`; shared
+  by channel vetting and (phase 5) video assessment.
 - `youtube.py` — `YouTubeClient` (injectable getter, quota count, key-free errors,
   `QuotaExceededError` / `InvalidKeyError`); `videos.py` — legacy search for fetch.
 - `config/settings.py` (pydantic settings from `.env`), `config/config_manager.py`
@@ -212,14 +229,16 @@ stages/
 └── report/             # Generated reports
     └── YYYY-MM-DD.html
 
-# Channel registry (git-tracked, decisions 0003, 0004)
+# Channel registry (git-tracked, decisions 0003, 0004, 0005)
 channels/
 └── bbc-earth/
     ├── channel.yaml                    # metadata by `channels add`; resolve fills a null channel_id
     ├── reviews/                        # append-only, one file per review
     │   └── 20261028T101500Z-matous.yaml
-    └── evidence/                       # append-only API snapshots (stats + recent uploads)
-        └── 20261028T185312Z.yaml
+    ├── evidence/                       # append-only API snapshots (stats + recent uploads)
+    │   └── 20261028T185312Z.yaml
+    └── vet/                            # append-only agent vet reports (frontmatter + markdown)
+        └── 20261028T201500Z.md
 
 # Analytics exports
 parquet/
@@ -275,7 +294,7 @@ Required environment variables in `.env`:
 ```bash
 # API Keys (required)
 YTKEY=your_youtube_api_key              # YouTube Data API v3 key
-ANTHROPIC_API_KEY=your_anthropic_key    # Claude API key
+ANTHROPIC_API_KEY=your_anthropic_key    # Claude API key (assess, enhance, channels vet)
 
 # Optional settings
 LOG_LEVEL=INFO                          # DEBUG, INFO, WARNING, ERROR, CRITICAL

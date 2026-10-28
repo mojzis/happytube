@@ -14,7 +14,8 @@ inspect and recover.
 - Git-tracked YAML/markdown files are the single source of truth for channels,
   evidence and review records. No database.
 - Agents work through the CLI (`happytube channels …`) with JSON output.
-- Humans work through a web review page in the existing Flask app.
+- Humans work through a web review page in the existing Flask app (superseded by
+  0006: FastAPI + htmx).
 - Both write the same review record: reviewer, role (human / agent), verdict, notes,
   timestamp. Only a human review can move a channel to `approved`.
 

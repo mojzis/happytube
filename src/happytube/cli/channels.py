@@ -1,8 +1,9 @@
 """``happytube channels`` — manage the trusted-channel registry.
 
-Only ``resolve`` and ``evidence`` call the YouTube API (they need ``YTKEY``); the
-rest need no keys. With ``--json`` the result goes to stdout as plain JSON (no rich
-markup); errors go to stderr with a non-zero exit code.
+Only ``resolve`` and ``evidence`` call the YouTube API (they need ``YTKEY``);
+``vet`` calls Claude (it needs only ``ANTHROPIC_API_KEY``); the rest need no
+keys. With ``--json`` the result goes to stdout as plain JSON (no rich markup);
+errors go to stderr with a non-zero exit code.
 """
 
 import json
@@ -34,7 +35,8 @@ from happytube.channels.store import (
     ChannelStoreError,
     filter_entries,
 )
-from happytube.config.settings import YouTubeSettings
+from happytube.channels.vet_run import AnthropicVetClient, VetRun, vet_channels
+from happytube.config.settings import AnthropicSettings, YouTubeSettings
 from happytube.paths import PROJECT_ROOT
 from happytube.youtube import YouTubeClient
 
@@ -181,7 +183,15 @@ def list_channels(  # noqa: PLR0913 - one parameter per CLI option
 def _print_table(entries: list[ChannelEntry]) -> None:
     table = Table(title=f"Channels ({len(entries)})")
     table.add_column("Slug", no_wrap=True)  # copied into show/review, keep whole
-    for column in ("Name", "Kind", "Lang", "Status", "Reviews (h/a)", "Evidence"):
+    for column in (
+        "Name",
+        "Kind",
+        "Lang",
+        "Status",
+        "Reviews (h/a)",
+        "Evidence",
+        "Vet",
+    ):
         table.add_column(column)
     for e in entries:
         s = e.summary_dict()
@@ -193,6 +203,7 @@ def _print_table(entries: list[ChannelEntry]) -> None:
             s["status"],
             f"{s['human_review_count']}/{s['agent_review_count']}",
             (s["evidence_at"] or "-")[:10],
+            s["vet_verdict"] or "-",
         )
     console.print(table)
 
@@ -210,6 +221,7 @@ def show_channel(store: ChannelStore, slug: str, as_json: bool) -> None:
         return
     reviews = detail.pop("reviews")
     evidence = detail.pop("evidence")
+    vet = detail.pop("vet")
     for key, value in detail.items():
         if value is not None:
             shown = ", ".join(value) if isinstance(value, list) else value
@@ -223,6 +235,31 @@ def show_channel(store: ChannelStore, slug: str, as_json: bool) -> None:
             markup=False,
         )
     _print_evidence(evidence)
+    _print_vet(vet)
+
+
+def _print_lines(lines: list[str]) -> None:
+    for line in lines:
+        console.print(line, highlight=False, markup=False, soft_wrap=True)
+
+
+def _print_vet(vet: dict[str, Any] | None) -> None:
+    if vet is None:
+        console.print("\n[bold]vet[/bold]: none yet (run channels vet)")
+        return
+    console.print("\n[bold]vet[/bold] (latest; full report with --json)")
+    _print_lines(
+        [
+            f"  vetted_at: {vet['vetted_at']} (snapshot {vet['evidence_at']})",
+            f"  verdict: {vet['verdict']} (model: {vet['model_verdict']}), "
+            f"flags: {', '.join(vet['flags']) or 'none'}",
+            f"  calm {vet['channel_calm']}/5, happy {vet['channel_happy']}/5, "
+            f"suitable: {vet['suitable_count']} of {len(vet['videos'])} long-form, "
+            f"shorts skipped: {vet['shorts_skipped']}",
+            f"  summary: {vet['summary']}",
+            f"  report: {vet['path']}",
+        ]
+    )
 
 
 def _or(value: Any, missing: str) -> Any:
@@ -252,8 +289,7 @@ def _print_evidence(evidence: dict[str, Any] | None, recent: int = 5) -> None:
         for v in videos[:recent]
     ]
     console.print("\n[bold]evidence[/bold] (latest; full list with --json)")
-    for line in lines:
-        console.print(f"  {line}", highlight=False, markup=False, soft_wrap=True)
+    _print_lines([f"  {line}" for line in lines])
 
 
 @channels.command("review")
@@ -314,30 +350,72 @@ def _select_slugs(store: ChannelStore, slugs: tuple[str, ...], all_: bool) -> li
     return selected
 
 
-def _report(run: Run, as_json: bool) -> None:
-    """Print a run, then exit 1 (message on stderr) if anything failed."""
+def _finish(run: Run | VetRun, as_json: bool, lines: Callable[[], list[str]]) -> None:
+    """Print a run as JSON or as ``lines()``, then exit 1 (message on stderr) if
+    anything failed."""
     if as_json:
         _echo_json(run.as_dict())
     else:
-        for r in run.results:
-            detail = r.path or r.channel_id or ""
-            if r.video_count is not None:
-                detail += f" ({r.video_count} videos, {r.shorts_count} shorts)"
-            if r.message:
-                detail += f" — {r.message}" if detail else r.message
-            console.print(
-                f"{r.slug}: {r.status} {detail}".rstrip(),
-                highlight=False,
-                markup=False,
-                soft_wrap=True,
-            )
-        console.print(f"quota units used: {run.quota_units}", highlight=False)
+        _print_lines(lines())
     if run.aborted:
         msg = f"Stopped early: {run.aborted}"
         raise click.ClickException(msg)
     if run.failed:
-        msg = "Some channels failed; see the report above"
+        where = "the JSON on stdout" if as_json else "the report above"
+        msg = f"Some channels failed; see {where}"
         raise click.ClickException(msg)
+
+
+def _with_message(text: str, message: str | None) -> str:
+    if not message:
+        return text.rstrip()
+    return f"{text.rstrip()} — {message}"
+
+
+def _report(run: Run, as_json: bool) -> None:
+    """Print a resolve or evidence run; exit 1 if anything failed."""
+
+    def lines() -> list[str]:
+        out = []
+        for r in run.results:
+            detail = r.path or r.channel_id or ""
+            if r.video_count is not None:
+                detail += f" ({r.video_count} videos, {r.shorts_count} shorts)"
+            out.append(_with_message(f"{r.slug}: {r.status} {detail}", r.message))
+        return [*out, f"quota units used: {run.quota_units}"]
+
+    _finish(run, as_json, lines)
+
+
+def _report_vet(run: VetRun, as_json: bool) -> None:
+    """Print a vet run with token and cost totals; exit 1 if anything failed."""
+
+    def lines() -> list[str]:
+        out = []
+        for r in run.results:
+            text = f"{r.slug}: {r.status}"
+            if r.verdict:
+                text += f" {r.verdict}"
+            if r.model_verdict and r.model_verdict != r.verdict:
+                text += f" (model: {r.model_verdict})"
+            if r.flags:
+                text += f" [{', '.join(r.flags)}]"
+            if r.suitable is not None:
+                text += f" {r.suitable}/{r.long_form} suitable"
+            elif r.long_form is not None:
+                text += f" ({r.long_form} long-form)"
+            if r.path:
+                text += f" {r.path}"
+            out.append(_with_message(text, r.message))
+        total = (
+            "dry run: no calls, no files"
+            if run.dry_run
+            else f"tokens: {run.input_tokens} in, {run.output_tokens} out, "
+            f"est. ${run.usd:.2f} (estimate at Opus 5.5 rates)"
+        )
+        return [*out, total]
+
+    _finish(run, as_json, lines)
 
 
 slug_args = click.argument("slugs", nargs=-1)
@@ -403,3 +481,51 @@ def evidence_command(
     selected = _select_slugs(store, slugs, all_)
     run = collect_evidence(store, make_youtube_client(), selected, max_videos)
     _report(run, as_json)
+
+
+def make_vet_client() -> AnthropicVetClient:
+    """Client with ``ANTHROPIC_API_KEY`` from the environment or ``.env``."""
+    try:
+        settings = AnthropicSettings()
+    except ValidationError as e:
+        msg = (
+            "ANTHROPIC_API_KEY is not set (environment or .env); it is needed to "
+            "vet channels (try --dry-run)"
+        )
+        raise click.ClickException(msg) from e
+    return AnthropicVetClient(settings.anthropic_api_key.get_secret_value())
+
+
+@channels.command("vet")
+@slug_args
+@all_option
+@click.option(
+    "--force", is_flag=True, help="Re-vet channels whose latest vet is current."
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show flags and what would be vetted; no Claude call, no key, no files.",
+)
+@json_option
+@click.pass_obj
+@_store_errors_as_click
+def vet_command(  # noqa: PLR0913 - one parameter per CLI option
+    store: ChannelStore,
+    slugs: tuple[str, ...],
+    all_: bool,
+    force: bool,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Vet channels with Claude from their latest evidence snapshot.
+
+    Writes an append-only vet report (vet/<time>.md) and an agent review per
+    channel; agent reviews never change status. Channels whose latest vet used
+    the latest snapshot are skipped unless --force; after a prompt or model
+    change, pass --force to re-vet them. Unresolved channels (no channel_id or
+    no snapshot) and channels a human rejected are skipped without a call.
+    """
+    selected = _select_slugs(store, slugs, all_)
+    client = None if dry_run else make_vet_client()
+    _report_vet(vet_channels(store, client, selected, force=force), as_json)

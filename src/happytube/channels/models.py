@@ -7,6 +7,8 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from happytube.rubric import Flag, Score
+
 Kind = Literal["broadcaster", "zoo", "aquarium", "park", "museum", "other"]
 Language = Literal["cs", "en"]
 Role = Literal["human", "agent"]
@@ -169,3 +171,70 @@ class Evidence(BaseModel):
     @field_serializer("fetched_at", "published_at")
     def _dump_times(self, value: datetime | None) -> str | None:
         return None if value is None else _iso_z(value)
+
+
+ChannelFlag = Literal["unresolved", "inactive", "mostly_shorts", "identity_doubt"]
+IdentityMatch = Literal["yes", "no", "unsure"]
+
+
+class VetUsage(BaseModel):
+    """Tokens one vet call used (input includes any cache reads and writes)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+
+
+class VetVideo(BaseModel):
+    """One scored long-form video in a vet report."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    video_id: str = Field(min_length=1)
+    title: str
+    calm: Score
+    happy: Score
+    flags: list[Flag] = Field(default_factory=list)
+    suitable: bool
+    note: str = ""
+
+
+class VetReport(BaseModel):
+    """Frontmatter of an agent vet report (``vet/<stamp>.md``, append-only).
+
+    ``verdict`` is final (after the verdict rule); ``model_verdict`` is what the
+    model said. ``evidence_at`` is the ``fetched_at`` of the snapshot judged.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    vetted_at: datetime = Field(default_factory=_now)
+    model: str = Field(min_length=1)
+    prompt_version: int = Field(ge=1)
+    evidence_at: datetime
+    verdict: Verdict
+    model_verdict: Verdict
+    flags: list[ChannelFlag] = Field(default_factory=list)
+    identity_match: IdentityMatch
+    identity_note: str = ""
+    channel_calm: Score
+    channel_happy: Score
+    summary: str = ""
+    concerns: list[str] = Field(default_factory=list)
+    usage: VetUsage
+    videos: list[VetVideo] = Field(default_factory=list)
+    shorts_skipped: int = Field(default=0, ge=0)
+
+    @property
+    def suitable_count(self) -> int:
+        return sum(1 for v in self.videos if v.suitable)
+
+    @field_validator("vetted_at", "evidence_at")
+    @classmethod
+    def _times_utc(cls, value: datetime) -> datetime:
+        return _as_utc(value)
+
+    @field_serializer("vetted_at", "evidence_at")
+    def _dump_times(self, value: datetime) -> str:
+        return _iso_z(value)

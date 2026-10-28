@@ -14,7 +14,7 @@ Then the existing pipeline fetches only from approved channels.
 - **Single source of truth: git-tracked files** (YAML/markdown) — channels, evidence,
   review records. No database.
 - **Agents** work through the CLI (`happytube channels …`, JSON output).
-- **Humans** work through a web review page (extend the Flask app).
+- **Humans** work through a web review page (FastAPI + htmx, decision 0006).
 - Both write the **same review records**: who (user / agent name), verdict, notes, when.
 - Nothing enters the allowlist without a human approval.
 - Calm matters as much as happy: no war, disasters, violence, predators hunting, sad
@@ -27,10 +27,10 @@ Then the existing pipeline fetches only from approved channels.
 | --- | --- | --- |
 | 0 ✅ | Template alignment | Repo matches `~/git/python-template` (src layout, uv dev group, ruff/ty, poe tasks, madoqua hook, aesop toolbox, dependabot); legacy modules deleted; `docs/` scaffold from ideas repo template with decision 0001 = trusted channels. |
 | 1 ✅ | Channel registry | Data model + files for channels (`candidate` / `approved` / `rejected`, kind, language, ids) and review records (reviewer, role human/agent, verdict, notes, timestamp). CLI: `channels add / list / show / review` with `--json`. Seed with the starter candidates from the idea doc. |
-| 2 | Channel evidence | Resolve handles → channel ids (`channels.list`), collect stats + recent uploads (RSS and/or `playlistItems`), video durations; cached per channel. Research note + decision record comparing fetch methods with quota math for 50/200/500 channels. |
-| 3 | Agent vetting | Claude vets a channel from its evidence with the calm/happy rubric → markdown vet report + an agent review record. Video-level assessment reuses the same rubric. CLI: `channels vet <id>`. |
-| 4 | Web review UI | Flask pages: channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records; video review queue. |
-| 5 | Trusted fetch | Fetch stage pulls new videos only from approved channels (method from phase 2's decision), skips Shorts, feeds assess/enhance/report/player. Also: fetch must fail loudly on network/parse errors (today a catch-all exits 0); web player/export read `stages/` instead of legacy `data/fetched/`. |
+| 2 ✅ | Channel evidence | Resolve handles → channel ids (`channels.list`), collect stats + recent uploads (RSS and/or `playlistItems`), video durations; cached per channel. Research note + decision record comparing fetch methods with quota math for 50/200/500 channels. |
+| 3 ✅ | Agent vetting | Claude vets a channel from its evidence with the calm/happy rubric → markdown vet report + an agent review record. Video-level assessment reuses the same rubric. CLI: `channels vet <id>`. |
+| 4 | Web review UI | FastAPI + htmx app (decision 0006): Jinja2 pages over `ChannelStore` — channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records; video review queue. |
+| 5 | Trusted fetch | Fetch stage pulls new videos only from approved channels (method from phase 2's decision), skips Shorts, feeds assess/enhance/report/player. Also: fetch must fail loudly on network/parse errors (today a catch-all exits 0); web player/export read `stages/` instead of legacy `data/fetched/`; the player moves from Flask to the FastAPI app and `flask` is dropped. |
 
 Later (not scheduled): discovery from directories (EAZA/AZA, park services, museums),
 featured-channel one-hop expansion, blocklist, per-person channel lists / distribution.
@@ -92,3 +92,17 @@ branch; merge only after the user says so.
   one broken channel.yaml blocks all writes.
 - V5: tests for quota/invalid key during the UUSH call and the batched-channels
   error paths (`collect.py`).
+
+## Backlog (from phase 3, not scheduled)
+
+- Q3: legacy `report` needs both API keys though it calls no API (same as phase 0 item).
+- Q4: `vet` asks for `ANTHROPIC_API_KEY` even when no selected channel needs a call.
+- A `ChannelStoreError` mid-run aborts vet/evidence/resolve; per-channel JSON of
+  channels already written (and paid for) is lost.
+- V1: tokens of a declined attempt before a fallback (`usage.iterations`) not counted.
+- V2: text-after-last-fallback-block layout unverified (no fallback in the real run).
+- V3: vet text output doesn't name the answering model on fallback.
+- anthropic SDK 2.x (API version `2026-10-21`); now pinned `>=1.17,<2`.
+- Cosmetic: "did not parse (1 problems)"; store imports private `_iso_z`.
+- Run-to-run variance of per-video scores (zoo-praha 45 vs 39/50 suitable on the
+  same snapshot): phase 5 should not treat one vet's video scores as final.
