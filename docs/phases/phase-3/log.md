@@ -56,3 +56,11 @@ keys. Q4 low — vet asks for key even when nothing needs a call.
 Orchestrator: fix R1, R2, R3, R4, R5, R6, Q1, Q2. Defer Q3, Q4, preexisting abort.
 
 ## 3 — fix
+Fix report: commits 11522c2 (create + json_schema, stop_reason first; skip rejected),
+fd9f398 (CLI/store cleanups, --force note), c1806a0 (docs). 298 passed, 75%.
+Resolved R1–R6, Q1, Q2. Deviations: `_call_error` returns VetError base; store
+imports private `_iso_z`; "did not parse (1 problems)" grammar; architecture.md
+unchanged. Unresolved: real-API shapes (json_schema, fallback content layout, usage
+across fallbacks) unverified — key still invalid.
+
+## 4 — verify (combined review + QA)
