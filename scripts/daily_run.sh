@@ -44,16 +44,22 @@ elif [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Commit and push what the trusted run wrote under stages/trusted/ (only there,
-# never `git add -A`); nothing changed → no commit. Returns non-zero on failure.
+# Commit what the trusted run wrote under stages/trusted/ (only there, never
+# `git add -A`; nothing changed → no commit), then push. The push runs every time,
+# so a commit left local by an earlier failed push goes out on the next run.
+# No stages/trusted/ (nothing fetched yet) → nothing to do. Non-zero on failure.
 push_trusted_stages() {
+    if [ ! -d stages/trusted ]; then
+        log "No stages/trusted directory; nothing to commit or push"
+        return 0
+    fi
     git add -- stages/trusted || return 1
     if git diff --cached --quiet -- stages/trusted; then
         log "No new trusted stage files; nothing to commit"
-        return 0
+    else
+        git commit -m "trusted run $DATE" -- stages/trusted 2>&1 | tee -a "$LOG_FILE" \
+            || return 1
     fi
-    git commit -m "trusted run $DATE" -- stages/trusted 2>&1 | tee -a "$LOG_FILE" \
-        || return 1
     git push 2>&1 | tee -a "$LOG_FILE" || return 1
     log "Pushed stages/trusted for $DATE"
 }
@@ -63,8 +69,10 @@ if [ "$PIPELINE" = "trusted" ]; then
     STATUS=0
     uv run happytube trusted run --date "$DATE" 2>&1 | tee -a "$LOG_FILE" || STATUS=1
     if [ "$STATUS" -eq 0 ]; then
-        uv run happytube trusted status --date "$DATE" 2>&1 | tee -a "$LOG_FILE"
         log "Trusted pipeline completed successfully"
+        # Informational only: a failure here must not skip the push below.
+        uv run happytube trusted status --date "$DATE" 2>&1 | tee -a "$LOG_FILE" \
+            || log "WARNING: trusted status failed (the run itself succeeded)"
     else
         log "ERROR: Trusted pipeline failed! See $LOG_FILE (rerunning is safe)"
     fi
@@ -104,16 +112,6 @@ if uv run happytube run-all \
         # SUBJECT="HappyTube Report - $DATE"
         # BODY="HappyTube report for $DATE is ready. See attached log."
         # echo "$BODY" | mail -s "$SUBJECT" -a "$LOG_FILE" user@example.com
-
-        # Optional: Deploy to web player
-        # Uncomment to automatically export and deploy to GitHub Pages
-        # log "Exporting to web player..."
-        # uv run python -m happytube.web.export 2>&1 | tee -a "$LOG_FILE"
-        # if [ -d "src/happytube/web/static" ]; then
-        #     log "Web export completed"
-        #     # You can add git commands here to commit and push
-        #     # cd src/happytube/web/static && git add . && git commit -m "Update $DATE" && git push
-        # fi
 
         log "========================================="
         log "Pipeline completed successfully"

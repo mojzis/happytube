@@ -37,3 +37,6 @@ htmlcov/
 
 # player build product (python -m happytube.web.export)
 src/happytube/web/static/videos.json
+
+# pipeline logs (scripts/daily_run.sh)
+/logs/
