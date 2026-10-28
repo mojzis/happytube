@@ -101,6 +101,14 @@ A cute cat video that makes everyone smile."""
         assert "video_id: test123" in string_output
         assert "---\n\nContent here" in string_output
 
+    def test_frontmatter_keeps_czech_readable(self, tmp_path):
+        path = tmp_path / "v.md"
+        MarkdownFile({"title": "Žirafy v zoo Dvůr Králové"}, "Text").save(path)
+        assert "title: Žirafy v zoo Dvůr Králové" in path.read_text(encoding="utf-8")
+        assert (
+            MarkdownFile.load(path).frontmatter["title"] == "Žirafy v zoo Dvůr Králové"
+        )
+
 
 class TestSettings:
     """Test Settings configuration."""

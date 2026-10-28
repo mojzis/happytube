@@ -9,7 +9,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from happytube.models.markdown import MarkdownFile
 from happytube.stages.base import Stage
 from happytube.utils import utc_now_iso
-from happytube.videos import Search, YouTubeAPIError
+from happytube.videos import Search
 
 console = Console()
 
@@ -130,15 +130,7 @@ class FetchStage(Stage):
                 "stage_dir": str(stage_dir),
             }
 
-        except YouTubeAPIError:
-            # A key/quota failure must fail the run, not look like a quiet day.
-            raise
         except Exception as e:
-            error_msg = f"Fatal error in FetchStage: {e!s}"
-            console.print(f"[red]✗ {error_msg}[/red]")
-            return {
-                "new_videos": 0,
-                "errors": 1,
-                "error_message": error_msg,
-                "date": target_date.strftime("%Y-%m-%d"),
-            }
+            # Any failure fails the run (CLI exit 1), never a quiet "0 new videos".
+            console.print(f"[red]✗ Fatal error in FetchStage: {e!s}[/red]")
+            raise

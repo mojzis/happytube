@@ -6,15 +6,12 @@ keys. With ``--json`` the result goes to stdout as plain JSON (no rich markup);
 errors go to stderr with a non-zero exit code.
 """
 
-import json
 from collections.abc import Callable
-from functools import wraps
 from pathlib import Path
 from typing import Any
 
 import click
 from pydantic import ValidationError
-from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
@@ -32,57 +29,20 @@ from happytube.channels.models import (
 from happytube.channels.store import (
     ChannelEntry,
     ChannelStore,
-    ChannelStoreError,
     filter_entries,
 )
 from happytube.channels.vet_run import AnthropicVetClient, VetRun, vet_channels
-from happytube.config.settings import AnthropicSettings, YouTubeSettings
-from happytube.paths import PROJECT_ROOT
-from happytube.youtube import YouTubeClient
-
-console = Console()
-
-json_option = click.option(
-    "--json", "as_json", is_flag=True, help="Print machine-readable JSON to stdout."
+from happytube.cli.common import (
+    channels_dir_option,
+    console,
+    echo_json,
+    json_option,
+    make_youtube_client,
+    print_lines,
+    store_errors_as_click,
+    with_message,
 )
-
-
-def _echo_json(data: Any) -> None:
-    click.echo(json.dumps(data, ensure_ascii=False, indent=2))
-
-
-def _store_errors_as_click(f: Callable) -> Callable:
-    """Turn store and input-validation errors into a clean stderr message, exit 1.
-
-    Problems in files on disk arrive as ``ChannelStoreError`` naming the file; a
-    ``ValidationError`` here comes from command-line input.
-    """
-
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except ChannelStoreError as e:
-            raise click.ClickException(str(e)) from e
-        except ValidationError as e:
-            problems = "; ".join(
-                f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}"
-                for err in e.errors()
-            )
-            msg = f"Invalid input: {problems}"
-            raise click.ClickException(msg) from e
-
-    return wrapper
-
-
-channels_dir_option = click.option(
-    "--channels-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    envvar="HAPPYTUBE_CHANNELS_DIR",
-    default=PROJECT_ROOT / "channels",
-    show_default="channels/ at repo root",
-    help="Registry directory (env: HAPPYTUBE_CHANNELS_DIR).",
-)
+from happytube.config.settings import AnthropicSettings
 
 
 @click.group()
@@ -112,7 +72,7 @@ def channels(ctx: click.Context, channels_dir: Path) -> None:
 @click.option("--added-by", required=True)
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def add_channel(  # noqa: PLR0913 - one parameter per CLI option
     store: ChannelStore,
     name: str,
@@ -146,7 +106,7 @@ def add_channel(  # noqa: PLR0913 - one parameter per CLI option
     )
     store.add(channel)
     if as_json:
-        _echo_json(store.get(slug).summary_dict())
+        echo_json(store.get(slug).summary_dict())
     else:
         click.echo(slug)
 
@@ -160,7 +120,7 @@ def add_channel(  # noqa: PLR0913 - one parameter per CLI option
 )
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def list_channels(  # noqa: PLR0913 - one parameter per CLI option
     store: ChannelStore,
     status: str | None,
@@ -178,7 +138,7 @@ def list_channels(  # noqa: PLR0913 - one parameter per CLI option
         needs_human_review=needs_human_review,
     )
     if as_json:
-        _echo_json([e.summary_dict() for e in entries])
+        echo_json([e.summary_dict() for e in entries])
         return
     _print_table(entries)
 
@@ -215,12 +175,12 @@ def _print_table(entries: list[ChannelEntry]) -> None:
 @click.argument("slug")
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def show_channel(store: ChannelStore, slug: str, as_json: bool) -> None:
     """Show a channel, its derived status and all reviews (oldest first)."""
     detail = store.get(slug).detail_dict()
     if as_json:
-        _echo_json(detail)
+        echo_json(detail)
         return
     reviews = detail.pop("reviews")
     evidence = detail.pop("evidence")
@@ -241,17 +201,12 @@ def show_channel(store: ChannelStore, slug: str, as_json: bool) -> None:
     _print_vet(vet)
 
 
-def _print_lines(lines: list[str]) -> None:
-    for line in lines:
-        console.print(line, highlight=False, markup=False, soft_wrap=True)
-
-
 def _print_vet(vet: dict[str, Any] | None) -> None:
     if vet is None:
         console.print("\n[bold]vet[/bold]: none yet (run channels vet)")
         return
     console.print("\n[bold]vet[/bold] (latest; full report with --json)")
-    _print_lines(
+    print_lines(
         [
             f"  vetted_at: {vet['vetted_at']} (snapshot {vet['evidence_at']})",
             f"  verdict: {vet['verdict']} (model: {vet['model_verdict']}), "
@@ -292,7 +247,7 @@ def _print_evidence(evidence: dict[str, Any] | None, recent: int = 5) -> None:
         for v in videos[:recent]
     ]
     console.print("\n[bold]evidence[/bold] (latest; full list with --json)")
-    _print_lines([f"  {line}" for line in lines])
+    print_lines([f"  {line}" for line in lines])
 
 
 @channels.command("review")
@@ -303,7 +258,7 @@ def _print_evidence(evidence: dict[str, Any] | None, recent: int = 5) -> None:
 @click.option("--notes")
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def review_channel(  # noqa: PLR0913 - one parameter per CLI option
     store: ChannelStore,
     slug: str,
@@ -320,7 +275,7 @@ def review_channel(  # noqa: PLR0913 - one parameter per CLI option
     path = store.add_review(slug, review)
     status = store.get(slug).status
     if as_json:
-        _echo_json(
+        echo_json(
             {
                 "slug": slug,
                 "status": status,
@@ -330,16 +285,6 @@ def review_channel(  # noqa: PLR0913 - one parameter per CLI option
         )
     else:
         click.echo(f"{slug}: {status}")
-
-
-def make_youtube_client() -> YouTubeClient:
-    """Client with ``YTKEY`` from the environment or ``.env``; clean error if unset."""
-    try:
-        settings = YouTubeSettings()
-    except ValidationError as e:
-        msg = "YTKEY is not set (environment or .env); it is needed to call YouTube"
-        raise click.ClickException(msg) from e
-    return YouTubeClient(settings.youtube_api_key.get_secret_value())
 
 
 def _select_slugs(store: ChannelStore, slugs: tuple[str, ...], all_: bool) -> list[str]:
@@ -357,9 +302,9 @@ def _finish(run: Run | VetRun, as_json: bool, lines: Callable[[], list[str]]) ->
     """Print a run as JSON or as ``lines()``, then exit 1 (message on stderr) if
     anything failed."""
     if as_json:
-        _echo_json(run.as_dict())
+        echo_json(run.as_dict())
     else:
-        _print_lines(lines())
+        print_lines(lines())
     if run.aborted:
         msg = f"Stopped early: {run.aborted}"
         raise click.ClickException(msg)
@@ -367,12 +312,6 @@ def _finish(run: Run | VetRun, as_json: bool, lines: Callable[[], list[str]]) ->
         where = "the JSON on stdout" if as_json else "the report above"
         msg = f"Some channels failed; see {where}"
         raise click.ClickException(msg)
-
-
-def _with_message(text: str, message: str | None) -> str:
-    if not message:
-        return text.rstrip()
-    return f"{text.rstrip()} — {message}"
 
 
 def _report(run: Run, as_json: bool) -> None:
@@ -384,7 +323,7 @@ def _report(run: Run, as_json: bool) -> None:
             detail = r.path or r.channel_id or ""
             if r.video_count is not None:
                 detail += f" ({r.video_count} videos, {r.shorts_count} shorts)"
-            out.append(_with_message(f"{r.slug}: {r.status} {detail}", r.message))
+            out.append(with_message(f"{r.slug}: {r.status} {detail}", r.message))
         return [*out, f"quota units used: {run.quota_units}"]
 
     _finish(run, as_json, lines)
@@ -409,7 +348,7 @@ def _report_vet(run: VetRun, as_json: bool) -> None:
                 text += f" ({r.long_form} long-form)"
             if r.path:
                 text += f" {r.path}"
-            out.append(_with_message(text, r.message))
+            out.append(with_message(text, r.message))
         total = (
             "dry run: no calls, no files"
             if run.dry_run
@@ -437,7 +376,7 @@ all_option = click.option(
 )
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def resolve_command(
     store: ChannelStore,
     slugs: tuple[str, ...],
@@ -469,7 +408,7 @@ def resolve_command(
 )
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def evidence_command(
     store: ChannelStore,
     slugs: tuple[str, ...],
@@ -512,7 +451,7 @@ def make_vet_client() -> AnthropicVetClient:
 )
 @json_option
 @click.pass_obj
-@_store_errors_as_click
+@store_errors_as_click
 def vet_command(  # noqa: PLR0913 - one parameter per CLI option
     store: ChannelStore,
     slugs: tuple[str, ...],

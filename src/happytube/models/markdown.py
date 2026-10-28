@@ -59,7 +59,10 @@ class MarkdownFile:
             Complete markdown file content with frontmatter
         """
         yaml_str = yaml.dump(
-            self.frontmatter, default_flow_style=False, sort_keys=False
+            self.frontmatter,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,  # Czech readable on disk, not \u escapes
         )
         return f"---\n{yaml_str}---\n\n{self.content}"
 

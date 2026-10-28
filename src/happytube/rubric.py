@@ -34,6 +34,10 @@ MIN_HAPPY = 3
 
 Score = Annotated[int, Field(ge=1, le=5)]
 
+# Bump when the RUBRIC text or the suitability rule changes; stored with every
+# trusted assessment so scores from different rubric versions can be told apart.
+RUBRIC_VERSION = 1
+
 RUBRIC = """\
 Audience: an elderly viewer with early dementia. She is easily frightened, \
 confused by fast or loud content, and scared by war news. She watches in Czech \
@@ -93,3 +97,18 @@ def is_suitable(calm: int, happy: int, flags: Collection[str]) -> bool:
         and happy >= MIN_HAPPY
         and not BLOCKING_FLAGS.intersection(flags)
     )
+
+
+def id_mismatch(expected: list[str], got: list[str]) -> str | None:
+    """What is wrong when a model's scores don't cover ``expected`` exactly once
+    each (missing, unexpected or doubled ids), or ``None`` when they do."""
+    problems = []
+    if missing := sorted(set(expected) - set(got)):
+        problems.append(f"missing {', '.join(missing)}")
+    if extra := sorted(set(got) - set(expected)):
+        problems.append(f"unexpected {', '.join(extra)}")
+    if duplicate := sorted({i for i in got if got.count(i) > 1}):
+        problems.append(f"scored twice {', '.join(duplicate)}")
+    if not problems:
+        return None
+    return "model output does not match the videos sent: " + "; ".join(problems)

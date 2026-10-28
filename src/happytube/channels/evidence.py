@@ -16,6 +16,11 @@ CHANNEL_DESCRIPTION_MAX = 1000
 VIDEO_DESCRIPTION_MAX = 300
 
 
+def uploads_playlist_id(channel_id: str) -> str:
+    """The ``UU…`` playlist holding all of a channel's uploads (``UC…`` → ``UU…``)."""
+    return "UU" + channel_id.removeprefix("UC")
+
+
 def shorts_playlist_id(channel_id: str) -> str:
     """The ``UUSH…`` playlist holding a channel's Shorts (``UC…`` → ``UUSH…``)."""
     return "UUSH" + channel_id.removeprefix("UC")
@@ -33,9 +38,11 @@ def is_short(duration_s: int | None, published_at: datetime | None = None) -> bo
     return duration_s <= limit
 
 
-def _truncate(text: str | None, limit: int) -> str:
+def _truncate(text: str | None, limit: int | None) -> str:
     text = text or ""
-    return text if len(text) <= limit else text[: limit - 1] + "…"
+    if limit is None or len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 def _count(statistics: dict[str, Any], key: str) -> int | None:
@@ -66,13 +73,16 @@ def upload_video_ids(playlist_items: list[dict[str, Any]]) -> list[str]:
 
 
 def evidence_video(
-    video: dict[str, Any], short_ids: set[str] | None = None
+    video: dict[str, Any],
+    short_ids: set[str] | None = None,
+    description_max: int | None = VIDEO_DESCRIPTION_MAX,
 ) -> EvidenceVideo | None:
     """One ``videos.list`` item as an ``EvidenceVideo``, or ``None`` if it lacks
     an id or a valid ``publishedAt`` (skipped rather than failing the channel).
 
     ``short_ids`` (from the ``UUSH…`` playlist) decides ``is_short``; ``None``
-    falls back to the duration rule.
+    falls back to the duration rule. ``description_max=None`` keeps the whole
+    description.
     """
     snippet = video.get("snippet", {})
     duration_s = _duration_s(video)
@@ -83,7 +93,7 @@ def evidence_video(
             published_at=snippet.get("publishedAt"),
             duration_s=duration_s,
             is_short=False,
-            description=_truncate(snippet.get("description"), VIDEO_DESCRIPTION_MAX),
+            description=_truncate(snippet.get("description"), description_max),
             default_language=snippet.get("defaultAudioLanguage")
             or snippet.get("defaultLanguage"),
             made_for_kids=video.get("status", {}).get("madeForKids"),

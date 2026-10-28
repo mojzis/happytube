@@ -7,23 +7,38 @@ previous stage's markdown files and writes its own, so stages can be rerun per d
 A Flask app serves a player for the curated videos; a static export of it deploys to
 GitHub Pages. A git-tracked channel registry holds candidate channels and their human
 and agent reviews; a local FastAPI + htmx review app (`happytube serve`) lets a human
-decide on them. Planned: put the registry in front of fetch, so videos come only from
-human-approved channels (see [plan](plan.md)).
+decide on them. The trusted pipeline (`happytube trusted`, decision 0009) fetches
+new videos only from human-approved channels, scores them with the shared rubric
+and cleans the descriptions of suitable ones; it runs side by side with the legacy
+search-by-category pipeline (see [plan](plan.md)).
 
 ## Components
 
 Current (`src/happytube/`):
 
-- `cli/` — click commands: `fetch`, `assess`, `enhance`, `report`, `run-all`, `status`,
-  `serve`, and the `channels` subgroup (`add`, `list`, `show`, `review`, `resolve`,
-  `evidence`, `vet`; `--json` for agents).
+- `cli/` — click commands: legacy `fetch`, `assess`, `enhance`, `report`, `run-all`,
+  `status`; `serve`; the `channels` subgroup (`add`, `list`, `show`, `review`,
+  `resolve`, `evidence`, `vet`) and the `trusted` subgroup (`fetch`, `assess`,
+  `enhance`, `run`, `status`); `--json` for agents.
+- `claude.py` — the one Claude call shape shared by vet and the trusted pipeline:
+  `MODEL` (Opus 5.5), effort, structured output into a pydantic type, server-side
+  refusal fallback, token counting, `estimate_usd`, and the error split
+  (`ClaudeStoppingError` for key/permission/credit, `ClaudeCallError` otherwise).
+- `trusted/` — the trusted pipeline (decision 0009). `stages.py`: `TrustedStage`
+  (dirs under `stages/trusted/`, the seen-id scan) and `status_counts`. `fetch.py`:
+  approved channels → uploads + `UUSH` Shorts + `videos.list` → new long-form
+  files; `FetchRun` stops on quota / bad key like `collect.py`. `assess.py`: one
+  call per channel batch, `id_mismatch` check, `is_suitable` in code. `enhance.py`:
+  one call per suitable video. `runs.py`: `ItemRun` / `run_items`, the shared run
+  loop (stopping error, dry run, client made only when there is work) behind the
+  `TrustedClient` protocol.
 - `channels/` — channel registry: `Channel`, `Review` and `Evidence` models and
   `ChannelStore` (files under `channels/`). Status is derived from the latest human
   approve/reject; agent reviews never change it; a rejected channel is the blocklist
   entry. `evidence.py` builds snapshots from API responses; `collect.py` runs
   resolve / evidence over many channels and stops on quota or a rejected key.
   `vet.py` holds the pure vetting parts (flags, prompt, verdict rule, report);
-  `vet_run.py` the Claude call behind a `VetClient` protocol and the vet run, which
+  `vet_run.py` the vet run behind a `VetClient` protocol (on `claude.py`), which
   stops on a rejected key, missing permission or no credit.
 - `review/` — local review UI (decision 0007): `create_app(store, …)` builds a
   FastAPI app over one `ChannelStore` (no global app, no cache, re-read per
@@ -35,12 +50,12 @@ Current (`src/happytube/`):
   (queue table; reviews section + out-of-band status badge), plain GET/POST
   fallbacks. A middleware refuses non-loopback `Host` headers (DNS rebinding) and
   cross-site POSTs by `Origin` / `Sec-Fetch-Site` (CSRF). htmx is vendored.
-- `rubric.py` — the calm/happy rubric, video flags, `VideoScore` and `is_suitable`,
-  shared by channel vetting and (phase 5) video assessment.
+- `rubric.py` — the calm/happy rubric (`RUBRIC_VERSION`), video flags, `VideoScore`,
+  `is_suitable` and `id_mismatch`, shared by channel vetting and trusted assess.
 - `youtube.py` — small YouTube Data API client (handle resolve, channels,
   playlistItems, videos): injectable HTTP getter, 50-id batching, quota count,
   errors that never contain the key.
-- `stages/` — `fetch` (YouTube Data API search), `assess` (Claude happiness score
+- `stages/` — legacy: `fetch` (YouTube Data API search), `assess` (Claude happiness score
   1–5), `enhance` (Claude rewrites descriptions of videos scoring ≥ threshold),
   `report` (HTML report + parquet exports).
 - `models/` — `MarkdownFile` (YAML frontmatter + body), `Video` (pydantic).
@@ -56,7 +71,12 @@ Planned:
 
 ## Data
 
-- `stages/<stage>/YYYY-MM-DD/video_<id>.md` — one markdown file per video per stage.
+- `stages/<stage>/YYYY-MM-DD/video_<id>.md` — legacy: one markdown file per video
+  per stage.
+- `stages/trusted/{fetch,assess,enhance}/YYYY-MM-DD/<id>.md` — trusted pipeline:
+  fetch frontmatter (channel, published, duration, `shorts_source`), assess adds
+  calm/happy/flags/note/`suitable`/model/`rubric_version`, enhance adds
+  `enhanced_description` (suitable videos only).
 - `stages/report/YYYY-MM-DD.html`, `parquet/<stage>/by-run-date/*.parquet`.
 - `config/base/*.yaml` — app, prompts, YouTube search settings.
 - `data/fetched/` (git-ignored) — legacy raw API JSON the web player still reads.
@@ -71,7 +91,15 @@ Planned:
 
 ## Flows
 
-- **Daily:** `happytube run-all` → fetch → assess → enhance → report.
+- **Daily (legacy, default of `scripts/daily_run.sh`):** `happytube run-all` →
+  fetch → assess → enhance → report.
+- **Daily (trusted, `HAPPYTUBE_PIPELINE=trusted scripts/daily_run.sh`):**
+  `happytube trusted run` → fetch approved channels' new long-form videos (~3
+  units per channel, skip any seen before) → assess per channel batch with the
+  rubric (Opus 5.5) → enhance suitable ones. Assess and enhance take everything
+  still pending up to the date, so a failed day's videos are picked up the next
+  day. A per-channel / per-batch failure exits ≠ 0 after the chain finishes; a
+  quota or key stop ends the chain; rerun is idempotent.
 - **Player:** `python -m happytube.web.server` locally, or
   `python -m happytube.web.export` → GitHub Pages.
 - **Evidence:** `channels resolve` (handle → channel id, once) → `channels evidence`
@@ -83,5 +111,8 @@ Planned:
 - **Review:** `happytube serve` → queue → channel page → approve / reject / unsure →
   review file in `channels/<slug>/reviews/` (status derived as for the CLI) → the
   user commits and pushes.
-- **Planned:** add candidate channel → collect evidence → agent vets → human
-  approves in the web UI or CLI → fetch reads only approved channels.
+- **Channel to video:** add candidate channel → collect evidence → agent vets →
+  human approves in the web UI or CLI → `trusted fetch` reads only approved
+  channels → the agent gates each video (decision 0008).
+- **Planned:** the player reads `stages/trusted/` (phase 5b); video spot-checks
+  (5c).
