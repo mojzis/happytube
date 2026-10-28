@@ -35,3 +35,14 @@ Don't modify tracked files or commit on the branch.
 Return ONLY JSON (≤500 words), number issues Q1, Q2…:
 {"verified": true, "checks": [{"step": 1, "ok": true, "evidence": ""}],
  "issues": [{"id": "Q1", "issue": ""}]}
+
+## Added by orchestrator after dev
+- Shorts: dev's research shows `0 < duration_s <= 180` gives heavy false positives
+  (Zoo Praha 33/50). Assess the cost/shape of switching `is_short` to UUSH-playlist
+  membership (playlistItems on `UUSH…`, 1 unit/page) with duration as fallback when
+  the UUSH call fails/404s. What breaks in snapshots/tests/docs?
+- Dev's scratch wrapper for the truncated key: confirm nothing of it landed in the
+  repo (no script, no key, no `.env` change tracked).
+- `InvalidKeyError` early stop and the `test_pipeline.py` chdir fix: correct?
+- Handle edits for explore-org / zoo-dvur-kralove / pbs-nature: snapshot titles match
+  the intended channels?
