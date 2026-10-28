@@ -1,14 +1,32 @@
-# ignore secrets, virtual environments and typical python compilation artifacts
+# secrets
 secrets.toml
 key.txt
 gkey.json
-data
-.pytest_cache
-# ignore basic python artifacts
 .env
-**/__pycache__/
-**/*.py[cod]
-**/*$py.class
-# ignore duckdb
+
+# local data
+data
 *.duckdb
 *.wal
+
+# python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+*.so
+
+# environments
+.venv/
+venv/
+
+# tool caches / reports
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
