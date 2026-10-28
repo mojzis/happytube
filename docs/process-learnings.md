@@ -365,3 +365,67 @@ fix → combined verify → learnings, as planned. No external API.
 - Should the browser check move into dev's real run for UI phases, so fix agents
   can also see their change?
 - Should vendored assets (htmx) get a check (hash vs header comment) in `poe check`?
+
+## Phase 5a (2026-10-28)
+
+Source: `docs/phases/phase-5a/` (trusted fetch + rubric assess + enhance, 4 agent
+steps after dev + 1 orchestrator real probe). Loop run: dev → review ‖ QA → fix →
+combined verify → orchestrator probe → learnings, as planned. Real paid APIs.
+
+### Loop design
+- **Review found a design gap that context.md had settled.** "Assess/enhance read
+  only `--date`" plus "any failing step stops `run`" strands videos for good (R1).
+  Not an external fact this time: a settled rule that was wrong in its
+  consequences. Phase 4 had a settled detail go wrong; this one was bigger.
+  Ask review to trace multi-day and partial-failure scenarios against the rules.
+- Review and QA found the same bug independently (R2 = Q1), by logic and at
+  runtime. Confirms phase 4: one duplicate, no wasted round.
+- Verify again found only lows (V1–V5). Confirms phases 0–4: keep verify; one fix
+  round is enough when verify says `ship`.
+- **Orchestrator real probe after verify** (scratch copy, 2 channels, 6 units,
+  $0.05) gave fresh eyes on real output from the fixed code. Cheap; keep it for
+  phases that call paid APIs.
+
+### Briefs & context
+- **The orchestrator decided the R1 fix design in the fix brief** (pending up to
+  `--date`, output under the fetch file's date, `--force` stays `--date` only, `run`
+  stops only on quota / key / credit). The fix agent built it with no questions.
+  When review offers two fixes, pick one in the brief.
+- Dev's real-run brief (probe first, ≤1 USD cap, stop on credential failure, nothing
+  committed from scratch) worked first time. Keys were valid; the probe preceded
+  the full run.
+- "Added after dev" checks, routed to one agent each, held again. Review's SDK
+  check against `.venv` source (not fakes) confirmed the extracted Claude call.
+
+### Agent reports
+- Dev's `unresolved_issues` had one wrong worry (quota stop mid-channel leaves
+  files). Review disproved it cheaply. An unresolved item is a question, not a
+  finding.
+- The fix agent's unresolved item (stale scores in a re-enhanced file) became a
+  verify question and then a 5b rule: readers take scores from assess.
+- Dev's eyeball field (counts per channel, two example notes) made the product
+  finding visible: BBC Earth 1/8 suitable.
+
+### Tooling gotchas
+- zsh (the orchestrator's shell) does not word-split variables:
+  `H="uv run happytube"; $H trusted …` fails. Use a shell function.
+- Real keys: `set -a; . .env; set +a` in the scratch cwd; never echo them. QA and
+  verify used fake keys only and checked no key text reached any output.
+
+### Answers to earlier open questions
+- *When dev's real run is blocked, pause or carry on?* (phase 3) Not tested: the
+  run was not blocked. The probe-first rule meant a block would have cost 1 call.
+- *Should the orchestrator eyeball real-data output?* (phase 2) Yes, and it worked
+  best as its own small probe after verify, on the final code.
+- *Should dev commit real-run data?* (phase 2) Dev committed nothing from scratch;
+  the run was reported only. No loss. Keep it that way until 5b needs real data.
+- *Is QA's fake-client check worth it when the risk is the SDK shape?* (phase 3)
+  Here QA found two lows (Q2, Q3) and the R2 bug independently; review owned the SDK
+  check. Worth it for a CLI with many exit paths.
+
+### Open questions (new)
+- Should context.md list the failure scenarios (one channel fails, quota mid-run,
+  rerun next day) so dev designs for them, not review?
+- Should the orchestrator probe after verify be a named step in the loop?
+- Should model scores be checked for drift across runs (same video, re-scored)
+  before 5b shows them?
