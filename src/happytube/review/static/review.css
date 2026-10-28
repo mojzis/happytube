@@ -93,4 +93,5 @@ ol.reviews { list-style: none; padding: 0; margin: 0 0 1.5rem; }
 .review-form label.choice { flex-direction: row; gap: 0.4rem; align-items: center; display: inline-flex; margin-right: 1.25rem; }
 fieldset { border: 1px solid var(--line); border-radius: 4px; }
 .error-message { color: var(--no); font-weight: 600; }
+.htmx-error { white-space: pre-wrap; }
 .filters .htmx-error { flex-basis: 100%; margin: 0; }

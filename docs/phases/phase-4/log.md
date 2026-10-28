@@ -67,3 +67,32 @@ Screenshots in session scratchpad `p4-qa-shots/` (not committed).
 - Q3 low — installed wheel: default `--channels-dir` → `<venv>/lib/python3.12/channels`,
   silently empty (preexisting PROJECT_ROOT default, shared with `channels`).
 - Q4 low — the two queue tables' columns don't line up.
+
+## 3 — fix
+Commits 0c27040..e02df23 (7). 398 passed, coverage 78%.
+
+- R1: htmx errors returned as text/plain with real status; `static/review.js`
+  (~15 lines) on `htmx:responseError`/`sendError` writes textContent into a
+  role=alert `<p class=htmx-error>` in the form (fallback `<main>`). Plain requests
+  still get error.html.
+- R2 (Q2): `serve` refuses 0.0.0.0 / :: / [::] (BadParameter, exit 2); Host check via
+  `ipaddress` canonical forms; LAN IPv4/IPv6 bind works; 0007 updated.
+- R3 plain `def` routes; R4 `FormError`; R5 lazy imports + subprocess test; R6 tests
+  split/asserts; R7 HTTPStatus + `ChannelEntry.human_/agent_review_count`.
+- Q1: socket probe before banner → one-line error, exit 1. Q4: `table-layout: fixed`.
+- deviations: probe race window; all htmx errors plain text (422 still swaps form);
+  `[]` stripped from --host; serve tests stub the probe; CSS commit precedes JS.
+- unresolved: htmx alert JS not tried in a real browser.
+
+## 4 — verify (combined)
+Verdict `ship`. R1, R2, R3–R7, Q1, Q4 resolved (browser: htmx 400/500 alerts shown
+as plain text in the form's role=alert box, hidden again on next request; approve
+still works; columns line up). Q2 partial → V1. All 4 fix deviations accepted.
+Safety: every tricky Host rejected (userinfo, trailing dot, 0x7f.1, 127.1, octal,
+decimal, [::ffff:127.0.0.1], [::1%lo], bad ports); Origin exact; textContent only.
+Screenshots in session scratchpad `p4-verify-shots/` (not committed).
+
+- V1 low — `serve --host 0` not caught as wildcard (`ipaddress` rejects '0',
+  getaddrinfo binds 0.0.0.0). → backlog.
+- V2 cosmetic — multi-line store errors collapse in the alert. → orchestrator fix:
+  `.htmx-error { white-space: pre-wrap; }` (CSS only, logged here).
