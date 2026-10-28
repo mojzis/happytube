@@ -39,7 +39,7 @@ def make_evidence(n_long=6, n_short=2, newest_days_ago=3, fetched_at=FETCHED_AT)
     ]
     videos += [
         EvidenceVideo(
-            video_id=f"v{i}",
+            video_id=f"v{i:010d}",  # an 11-char id, like YouTube's
             title=f"Mládě {i} | žirafa",
             published_at=fetched_at - timedelta(days=newest_days_ago + n_short + i),
             duration_s=125,

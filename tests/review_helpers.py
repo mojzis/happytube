@@ -26,10 +26,15 @@ def make_vet(evidence, verdict="approve", flags=(), title="Mládě | žirafa"):
     """A vet report scoring two videos, the first suitable."""
     videos = [
         VetVideo(
-            video_id="v0", title=title, calm=5, happy=4, suitable=True, note="Klidné."
+            video_id="v0000000000",
+            title=title,
+            calm=5,
+            happy=4,
+            suitable=True,
+            note="Klidné.",
         ),
         VetVideo(
-            video_id="v1",
+            video_id="v0000000001",
             title="Krmení",
             calm=2,
             happy=3,

@@ -139,8 +139,8 @@ def test_detail_shows_channel_evidence_vet_and_reviews(app, store):
     assert "39 800" in html  # subscribers
     assert "6 long-form, 2 Shorts" in html
     assert 'class="verdict verdict-approve">approve</span> (model said approve)' in html
-    assert "https://i.ytimg.com/vi/v0/mqdefault.jpg" in html
-    assert "https://www.youtube.com/watch?v=v0" in html
+    assert "https://i.ytimg.com/vi/v0000000000/mqdefault.jpg" in html
+    assert "https://www.youtube.com/watch?v=v0000000000" in html
     assert "predation" in html
     assert "2 Shorts skipped" in html
     assert "one feeding clip" in html

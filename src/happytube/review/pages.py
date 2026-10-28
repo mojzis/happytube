@@ -1,6 +1,5 @@
 """Rendering and request helpers shared by the channel and video review routes."""
 
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,12 +11,11 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from happytube.review.queue import is_unresolved, needs_attention
+from happytube.trusted.stages import is_video_id
 
 PACKAGE_DIR = Path(__file__).parent
 REVIEWER_COOKIE = "happytube_reviewer"
 COOKIE_MAX_AGE = 365 * 24 * 3600
-# YouTube video ids are URL-safe base64; anything else is never put in a link.
-VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def _fmt_dt(value: datetime | None) -> str:
@@ -43,7 +41,9 @@ def _fmt_pct(value: float | None) -> str:
 
 
 def _is_video_id(value: object) -> bool:
-    return bool(VIDEO_ID_RE.fullmatch(str(value)))
+    """The one video-id rule (``trusted.stages.is_video_id``); anything else is
+    never put in a link."""
+    return is_video_id(str(value))
 
 
 def _templates() -> Jinja2Templates:
