@@ -15,6 +15,7 @@ refuses cross-site ``POST`` by ``Origin`` / ``Sec-Fetch-Site`` — against CSRF.
 """
 
 import ipaddress
+import logging
 import re
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -48,6 +49,8 @@ from happytube.review.queue import (
     queue_sections,
 )
 from happytube.trusted.player import player_videos, videos_json
+
+logger = logging.getLogger(__name__)
 
 PACKAGE_DIR = Path(__file__).parent
 PLAYER_DIR = PACKAGE_DIR.parent / "web" / "static"
@@ -342,10 +345,18 @@ def create_app(
     _install_error_handlers(app, pages)
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
 
+    trusted_dir = stages_dir / "trusted"
+    warned_missing = False
+
     # Before the /player mount, so a videos.json left in the static dir by an
-    # export never shadows the live selection.
-    @app.get("/player/videos.json")
+    # export never shadows the live selection (HEAD included).
+    @app.api_route("/player/videos.json", methods=["GET", "HEAD"])
     def player_json() -> JSONResponse:
+        nonlocal warned_missing
+        if not trusted_dir.is_dir() and not warned_missing:
+            # A wrong --stages-dir would otherwise look like "no videos yet".
+            logger.warning("Player: %s does not exist; showing no videos", trusted_dir)
+            warned_missing = True
         videos = videos_json(player_videos(stages_dir, store))
         return JSONResponse(videos, headers={"Cache-Control": "no-store"})
 

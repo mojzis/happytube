@@ -1,5 +1,7 @@
 """The player routes of the local app (TestClient, no server, no network)."""
 
+import logging
+
 from fastapi.testclient import TestClient
 
 from happytube.channels.models import Review
@@ -71,10 +73,27 @@ def test_videos_json_follows_a_later_reject(tmp_path):
     assert [v["channel_slug"] for v in client.get(PLAYER_JSON).json()] == ["zoo"]
 
 
-def test_videos_json_empty_without_stages(tmp_path):
+def test_videos_json_empty_without_stages_warns_once(tmp_path, caplog):
     store = ChannelStore(tmp_path / "channels")
     app = create_app(store, default_reviewer=None, stages_dir=tmp_path / "none")
-    assert TestClient(app, base_url=BASE_URL).get(PLAYER_JSON).json() == []
+    client = TestClient(app, base_url=BASE_URL)
+
+    with caplog.at_level(logging.WARNING, logger="happytube.review.app"):
+        assert client.get(PLAYER_JSON).json() == []
+        assert client.get(PLAYER_JSON).json() == []
+
+    [record] = caplog.records
+    assert str(tmp_path / "none" / "trusted") in record.getMessage()
+
+
+def test_videos_json_head_is_the_live_route(tmp_path):
+    client = _client(tmp_path)
+    # A stale export in the static dir must not answer HEAD either.
+    head = client.head(PLAYER_JSON)
+    get = client.get(PLAYER_JSON)
+    assert head.status_code == 200
+    assert head.headers["cache-control"] == "no-store"
+    assert head.headers["content-length"] == get.headers["content-length"]
 
 
 def test_player_behind_host_guard(tmp_path):

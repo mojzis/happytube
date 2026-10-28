@@ -34,10 +34,13 @@ def run_calls(monkeypatch):
 
 
 @pytest.fixture
-def served(run_calls, monkeypatch):
+def served(run_calls, monkeypatch, tmp_path):
     """As ``run_calls``, with the port check passing: tests don't depend on port
-    8000 being free or on this machine having the address."""
+    8000 being free or on this machine having the address. The cwd is a temp dir
+    with an (empty) ``stages/trusted/``, so the default stages dir exists."""
     monkeypatch.setattr("happytube.cli.serve._check_port_free", lambda host, port: None)
+    (tmp_path / "stages" / "trusted").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
     return run_calls
 
 
@@ -117,6 +120,14 @@ def test_serve_stages_dir_reaches_the_player(served, tmp_path, monkeypatch):
     [(app, _)] = served
     videos = TestClient(app, base_url=LOCALHOST).get(PLAYER_JSON).json()
     assert [v["channel_slug"] for v in videos] == ["zoo"]
+
+
+def test_serve_warns_when_the_trusted_stages_are_missing(served, tmp_path):
+    result = CliRunner().invoke(cli, ["serve", "--stages-dir", str(tmp_path / "x")])
+
+    assert result.exit_code == 0, result.output
+    assert f"Warning: {tmp_path / 'x' / 'trusted'} does not exist" in result.stderr
+    assert len(served) == 1
 
 
 @pytest.mark.parametrize("host", ["192.168.1.5", "fe80::1", "[fe80::1]"])

@@ -74,6 +74,13 @@ def serve(
     click.echo(f"Player: http://{url_host}:{port}/player/")
     click.echo(f"Registry: {channels_dir}")
     click.echo(f"Stages: {stages_dir}")
+    if not (stages_dir / "trusted").is_dir():
+        click.secho(
+            f"Warning: {stages_dir / 'trusted'} does not exist — the player will "
+            "show no videos (check --stages-dir / HAPPYTUBE_STAGES_DIR).",
+            fg="yellow",
+            err=True,
+        )
     app = create_app(
         ChannelStore(channels_dir),
         default_reviewer=reviewer,
