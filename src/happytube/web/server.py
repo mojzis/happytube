@@ -4,11 +4,15 @@ Serves curated YouTube videos with controlled playback interface.
 """
 
 import json
-from pathlib import Path
+import logging
 
 from flask import Flask, jsonify, render_template
 
+from happytube.paths import LEGACY_FETCHED_DIR
+from happytube.web.export import extract_video_info
+
 app = Flask(__name__)
+logger = logging.getLogger(__name__)
 
 
 def load_video_data():
@@ -21,7 +25,7 @@ def load_video_data():
     videos = []
 
     # Try to load from data directory if it exists
-    data_dir = Path(__file__).parent.parent.parent / "data" / "fetched"
+    data_dir = LEGACY_FETCHED_DIR
 
     if data_dir.exists():
         # Look for video JSON files
@@ -29,7 +33,7 @@ def load_video_data():
 
         for video_file in video_files:
             try:
-                with open(video_file, "r") as f:
+                with video_file.open() as f:
                     data = json.load(f)
                     # Adapt to YouTube API response format
                     if isinstance(data, list):
@@ -38,37 +42,9 @@ def load_video_data():
                             if video_info:
                                 videos.append(video_info)
             except Exception as e:
-                print(f"Error loading {video_file}: {e}")
+                logger.warning("Error loading %s: %s", video_file, e)
 
     return videos
-
-
-def extract_video_info(item):
-    """Extract video information from YouTube API response."""
-    try:
-        # Handle both search results and video details format
-        if "id" in item:
-            video_id = (
-                item["id"].get("videoId")
-                if isinstance(item["id"], dict)
-                else item["id"]
-            )
-        else:
-            return None
-
-        snippet = item.get("snippet", {})
-
-        return {
-            "video_id": video_id,
-            "title": snippet.get("title", "Unknown Title"),
-            "description": snippet.get("description", ""),
-            "channel_title": snippet.get("channelTitle", ""),
-            "thumbnail": snippet.get("thumbnails", {}).get("high", {}).get("url", ""),
-            "published_at": snippet.get("publishedAt", ""),
-        }
-    except Exception as e:
-        print(f"Error extracting video info: {e}")
-        return None
 
 
 @app.route("/")

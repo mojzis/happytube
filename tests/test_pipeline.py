@@ -1,13 +1,33 @@
 """Integration tests for the HappyTube pipeline."""
 
-import pytest
 from datetime import date
 
+import pytest
+import yaml
+from pydantic import ValidationError
+
+from happytube.config.settings import Settings
 from happytube.models.markdown import MarkdownFile
 from happytube.models.video import Video
-from happytube.config.settings import Settings
 from happytube.stages.base import Stage
 from happytube.stages.fetch import FetchStage
+
+
+def _save_assessed(assess_dir, videos: list[dict]) -> None:
+    """Write an assessed-stage markdown file for each ``video_id``/score pair."""
+    for video in videos:
+        video_id = video["video_id"]
+        frontmatter = {
+            "video_id": video_id,
+            "title": f"Video {video_id}",
+            "channel": "Test",
+            "stage": "assessed",
+            "happiness_score": video["happiness_score"],
+            "fetched_at": "2025-11-16T10:00:00Z",
+            "assessed_at": "2025-11-16T11:00:00Z",
+        }
+        content = f"# Video {video_id}\n\nTest content"
+        MarkdownFile(frontmatter, content).save(assess_dir / f"video_{video_id}.md")
 
 
 class TestMarkdownFile:
@@ -110,7 +130,7 @@ class TestSettings:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test_key")
         monkeypatch.setenv("LOG_LEVEL", "invalid")
 
-        with pytest.raises(Exception):  # Should raise validation error
+        with pytest.raises(ValidationError):
             Settings()
 
     def test_missing_credentials(self, monkeypatch):
@@ -119,7 +139,7 @@ class TestSettings:
         monkeypatch.setenv("YTKEY", "test_key")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-        with pytest.raises(Exception):  # Should raise validation error
+        with pytest.raises(ValidationError):
             Settings()
 
 
@@ -244,10 +264,7 @@ class TestPipelineDataFlow:
         md_file = MarkdownFile(frontmatter, content)
         md_file.save(fetch_dir / "video_test123.md")
 
-        # Verify file was created
-        assert (fetch_dir / "video_test123.md").exists()
-
-        # Load it back (simulating assess stage reading fetch stage)
+        # Load it back as the assess stage would (raises if the file is missing)
         loaded = MarkdownFile.load(fetch_dir / "video_test123.md")
         assert loaded.frontmatter["video_id"] == "test123"
         assert loaded.frontmatter["stage"] == "fetched"
@@ -287,39 +304,21 @@ class TestPipelineDataFlow:
             {"video_id": "sad", "happiness_score": 1},
         ]
 
-        for video in videos:
-            frontmatter = {
-                "video_id": video["video_id"],
-                "title": f"Video {video['video_id']}",
-                "channel": "Test",
-                "stage": "assessed",
-                "happiness_score": video["happiness_score"],
-                "fetched_at": "2025-11-16T10:00:00Z",
-                "assessed_at": "2025-11-16T11:00:00Z",
-            }
-            content = f"# Video {video['video_id']}\n\nTest content"
-
-            md_file = MarkdownFile(frontmatter, content)
-            md_file.save(assess_dir / f"video_{video['video_id']}.md")
+        _save_assessed(assess_dir, videos)
 
         # Load videos that meet threshold (>= 3)
         threshold = 3
-        eligible_videos = []
-
-        for md_path in assess_dir.glob("video_*.md"):
-            md_file = MarkdownFile.load(md_path)
-            if md_file.frontmatter.get("happiness_score", 0) >= threshold:
-                eligible_videos.append(md_file)
+        loaded = [MarkdownFile.load(p) for p in assess_dir.glob("video_*.md")]
+        eligible_videos = [
+            m for m in loaded if m.frontmatter.get("happiness_score", 0) >= threshold
+        ]
 
         # Should have 3 videos (scores 5, 4, 3)
         assert len(eligible_videos) == 3
 
         # Verify they're the right ones
         video_ids = [v.frontmatter["video_id"] for v in eligible_videos]
-        assert "happy1" in video_ids
-        assert "happy2" in video_ids
-        assert "neutral" in video_ids
-        assert "sad" not in video_ids
+        assert sorted(video_ids) == ["happy1", "happy2", "neutral"]
 
 
 class TestErrorHandling:
@@ -345,7 +344,7 @@ title: [unclosed bracket
 Content"""
         )
 
-        with pytest.raises(Exception):  # Should raise YAML parsing error
+        with pytest.raises(yaml.YAMLError):
             MarkdownFile.load(broken_file)
 
     def test_stage_with_empty_directory(self, tmp_path):
@@ -355,8 +354,6 @@ Content"""
         fetch_dir.mkdir(parents=True)
 
         # Try to load videos (should return empty list, not error)
-        videos = []
-        for md_path in fetch_dir.glob("video_*.md"):
-            videos.append(MarkdownFile.load(md_path))
+        videos = [MarkdownFile.load(p) for p in fetch_dir.glob("video_*.md")]
 
         assert len(videos) == 0

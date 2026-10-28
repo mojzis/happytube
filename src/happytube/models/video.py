@@ -1,11 +1,15 @@
 """Video model with analytics export capabilities."""
 
-from datetime import datetime, date, timedelta
+import logging
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 from pydantic import BaseModel, Field
+
+from happytube.models.markdown import MarkdownFile
+
+logger = logging.getLogger(__name__)
 
 
 class Video(BaseModel):
@@ -19,31 +23,31 @@ class Video(BaseModel):
     video_id: str = Field(..., description="YouTube video ID")
     title: str = Field(..., description="Video title")
     channel: str = Field(..., description="Channel name/title")
-    category: Optional[str] = Field(None, description="Video category")
-    duration: Optional[int] = Field(None, description="Video duration in seconds")
+    category: str | None = Field(None, description="Video category")
+    duration: int | None = Field(None, description="Video duration in seconds")
     fetched_at: datetime = Field(..., description="When the video was fetched")
     stage: str = Field(..., description="Current processing stage")
-    script_type: Optional[str] = Field(None, description="Script type (e.g., LATIN)")
+    script_type: str | None = Field(None, description="Script type (e.g., LATIN)")
 
     # Additional metadata fields
-    channel_id: Optional[str] = Field(None, description="YouTube channel ID")
-    published_at: Optional[str] = Field(None, description="When video was published")
+    channel_id: str | None = Field(None, description="YouTube channel ID")
+    published_at: str | None = Field(None, description="When video was published")
 
     # Assessment fields (populated during assess stage)
-    happiness_score: Optional[int] = Field(
+    happiness_score: int | None = Field(
         None, ge=1, le=5, description="Happiness score (1-5)"
     )
-    happiness_reasoning: Optional[str] = Field(
+    happiness_reasoning: str | None = Field(
         None, description="Reasoning for happiness score"
     )
-    assessed_at: Optional[datetime] = Field(None, description="When assessed")
-    prompt_version: Optional[str] = Field(None, description="Prompt version used")
+    assessed_at: datetime | None = Field(None, description="When assessed")
+    prompt_version: str | None = Field(None, description="Prompt version used")
 
     # Enhancement fields (populated during enhance stage)
-    enhanced_description: Optional[str] = Field(
+    enhanced_description: str | None = Field(
         None, description="Enhanced video description"
     )
-    enhanced_at: Optional[datetime] = Field(None, description="When enhanced")
+    enhanced_at: datetime | None = Field(None, description="When enhanced")
 
     @classmethod
     def from_frontmatter(cls, frontmatter: dict) -> "Video":
@@ -76,10 +80,8 @@ class Video(BaseModel):
         Returns:
             DataFrame containing all videos from the specified stage and date range
         """
-        from happytube.models.markdown import MarkdownFile
-
         base_path = Path("stages") / stage_name
-        end_date = date.today()
+        end_date = datetime.now().astimezone().date()
         start_date = end_date - timedelta(days=days_back - 1)
 
         all_videos = []
@@ -94,8 +96,7 @@ class Video(BaseModel):
                         video = cls.from_frontmatter(md_file.frontmatter)
                         all_videos.append(video.to_pandas_dict())
                     except Exception:
-                        # Skip files that can't be parsed
-                        pass
+                        logger.debug("Skipping unparsable %s", md_file_path)
             current_date += timedelta(days=1)
 
         return pd.DataFrame(all_videos) if all_videos else pd.DataFrame()

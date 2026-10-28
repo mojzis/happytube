@@ -9,9 +9,10 @@ static hosting services.
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
-logging.basicConfig(level=logging.INFO)
+from happytube.paths import LEGACY_FETCHED_DIR
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +44,7 @@ def extract_video_info(item: dict) -> dict | None:
         return None
 
 
-def load_videos_from_data_dir(data_dir: Path) -> List[Dict[str, Any]]:
+def load_videos_from_data_dir(data_dir: Path) -> list[dict[str, Any]]:
     """
     Load video data from the HappyTube data directory.
 
@@ -66,7 +67,7 @@ def load_videos_from_data_dir(data_dir: Path) -> List[Dict[str, Any]]:
 
     for video_file in video_files:
         try:
-            with open(video_file, "r") as f:
+            with video_file.open() as f:
                 data = json.load(f)
 
                 # Handle both list and single item formats
@@ -95,9 +96,7 @@ def export_to_static(output_path: Path, data_dir: Path | None = None) -> None:
     """
     # Auto-detect data directory if not provided
     if data_dir is None:
-        # Assume script is run from project root
-        project_root = Path(__file__).parent.parent.parent
-        data_dir = project_root / "data" / "fetched"
+        data_dir = LEGACY_FETCHED_DIR
 
     # Load videos
     videos = load_videos_from_data_dir(data_dir)
@@ -105,7 +104,7 @@ def export_to_static(output_path: Path, data_dir: Path | None = None) -> None:
     if not videos:
         logger.warning("No videos found to export!")
         logger.info(
-            "Make sure to run 'poetry run python -m happytube.main' first to fetch videos"
+            "No video JSON found under %s (legacy data/fetched layout)", data_dir
         )
         # Create empty file for consistency
         videos = []
@@ -114,7 +113,7 @@ def export_to_static(output_path: Path, data_dir: Path | None = None) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write to JSON file
-    with open(output_path, "w") as f:
+    with output_path.open("w") as f:
         json.dump(videos, f, indent=2)
 
     logger.info(f"Exported {len(videos)} videos to {output_path}")
@@ -122,6 +121,7 @@ def export_to_static(output_path: Path, data_dir: Path | None = None) -> None:
 
 def main():
     """Main export function - run this to generate static build."""
+    logging.basicConfig(level=logging.INFO)
     # Determine paths
     script_dir = Path(__file__).parent
     output_file = script_dir / "static" / "videos.json"

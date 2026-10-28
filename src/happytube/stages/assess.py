@@ -3,11 +3,12 @@
 import csv
 import io
 import os
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 from anthropic import Anthropic
+from anthropic.types import MessageParam
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -15,6 +16,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from happytube.models.markdown import MarkdownFile
 from happytube.prompts import get_prompt, prompt_definitions
 from happytube.stages.base import Stage
+from happytube.utils import first_text, utc_now_iso
 
 console = Console()
 
@@ -71,9 +73,7 @@ class AssessStage(Stage):
                 md_file = MarkdownFile.load(md_path)
                 videos.append(md_file)
             except Exception as e:
-                console.print(
-                    f"[yellow]⚠ Error loading {md_path.name}: {str(e)}[/yellow]"
-                )
+                console.print(f"[yellow]⚠ Error loading {md_path.name}: {e!s}[/yellow]")
 
         return videos
 
@@ -102,7 +102,7 @@ class AssessStage(Stage):
 
         return output.getvalue()
 
-    def _parse_claude_response(self, response_text: str) -> Dict[str, Dict[str, Any]]:
+    def _parse_claude_response(self, response_text: str) -> dict[str, dict[str, Any]]:
         """Parse Claude's CSV response.
 
         Args:
@@ -129,11 +129,11 @@ class AssessStage(Stage):
                     "happiness_reasoning": row.get("reasoning", ""),
                 }
         except Exception as e:
-            console.print(f"[red]✗ Error parsing Claude response: {str(e)}[/red]")
+            console.print(f"[red]✗ Error parsing Claude response: {e!s}[/red]")
 
         return results
 
-    async def run(self, target_date: date) -> Dict[str, Any]:
+    async def run(self, target_date: date) -> dict[str, Any]:
         """Assess video happiness and update markdown files.
 
         Args:
@@ -145,7 +145,7 @@ class AssessStage(Stage):
         stage_dir = self.ensure_stage_dir(target_date)
 
         console.print(
-            f"[bold blue]🎯 Assessing videos for {target_date.strftime('%Y-%m-%d')}...[/bold blue]"
+            f"[bold blue]🎯 Assessing videos for {target_date:%Y-%m-%d}...[/bold blue]"
         )
 
         try:
@@ -185,7 +185,7 @@ class AssessStage(Stage):
                     "Calling Claude API for happiness assessment...", total=None
                 )
 
-                message = {
+                message: MessageParam = {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
@@ -202,7 +202,7 @@ class AssessStage(Stage):
                 progress.update(task, completed=True)
 
             # Extract text from response
-            response_text = response.content[0].text if response.content else ""
+            response_text = first_text(response.content)
 
             console.print("[green]✓ Received response from Claude[/green]")
 
@@ -229,7 +229,7 @@ class AssessStage(Stage):
                         video.update_frontmatter(
                             {
                                 "stage": "assessed",
-                                "assessed_at": datetime.utcnow().isoformat() + "Z",
+                                "assessed_at": utc_now_iso(),
                                 "happiness_score": assessment.get("happiness_score", 0),
                                 "happiness_reasoning": assessment.get(
                                     "happiness_reasoning", ""
@@ -245,7 +245,7 @@ class AssessStage(Stage):
                         assessed_count += 1
 
                     except Exception as e:
-                        error_msg = f"Error saving assessed video {video_id}: {str(e)}"
+                        error_msg = f"Error saving assessed video {video_id}: {e!s}"
                         errors.append(error_msg)
                         console.print(f"[red]✗ {error_msg}[/red]")
 
@@ -277,7 +277,7 @@ class AssessStage(Stage):
             }
 
         except Exception as e:
-            error_msg = f"Fatal error in AssessStage: {str(e)}"
+            error_msg = f"Fatal error in AssessStage: {e!s}"
             console.print(f"[red]✗ {error_msg}[/red]")
             return {
                 "assessed_videos": 0,

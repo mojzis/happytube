@@ -34,5 +34,4 @@ from happytube.utils import determine_text_script
 )
 def test_determine_text_script(text, expected):
     result = determine_text_script(text)
-    # pytest.fail(f"{result=}, {expected=}")
     assert result == expected

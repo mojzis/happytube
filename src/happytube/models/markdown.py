@@ -1,14 +1,15 @@
 """Markdown file handling with YAML frontmatter support."""
 
-import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import yaml
 
 
 class MarkdownFile:
     """Represents a Markdown file with YAML frontmatter."""
 
-    def __init__(self, frontmatter: Dict[str, Any], content: str):
+    def __init__(self, frontmatter: dict[str, Any], content: str):
         """Initialize a MarkdownFile.
 
         Args:
@@ -28,7 +29,7 @@ class MarkdownFile:
         Returns:
             MarkdownFile instance with parsed frontmatter and content
         """
-        with open(file_path, "r", encoding="utf-8") as f:
+        with file_path.open(encoding="utf-8") as f:
             text = f.read()
 
         # Split frontmatter and content
@@ -48,7 +49,7 @@ class MarkdownFile:
         Args:
             file_path: Path where the markdown file should be saved
         """
-        with open(file_path, "w", encoding="utf-8") as f:
+        with file_path.open("w", encoding="utf-8") as f:
             f.write(self.to_string())
 
     def to_string(self) -> str:
@@ -62,7 +63,7 @@ class MarkdownFile:
         )
         return f"---\n{yaml_str}---\n\n{self.content}"
 
-    def update_frontmatter(self, updates: Dict[str, Any]) -> None:
+    def update_frontmatter(self, updates: dict[str, Any]) -> None:
         """Update frontmatter with new values.
 
         Args:

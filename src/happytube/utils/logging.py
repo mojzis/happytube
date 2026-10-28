@@ -3,13 +3,12 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def setup_logging(
     log_level: str = "INFO",
-    log_file: Optional[Path] = None,
-    logger_name: Optional[str] = None,
+    log_file: Path | None = None,
+    logger_name: str | None = None,
 ) -> logging.Logger:
     """Set up centralized logging for the application.
 

@@ -1,9 +1,9 @@
 """Enhance stage - improves video descriptions using Claude AI."""
 
 import os
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -12,6 +12,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from happytube.models.markdown import MarkdownFile
 from happytube.stages.base import Stage
+from happytube.utils import first_text, utc_now_iso
 
 console = Console()
 
@@ -76,9 +77,7 @@ class EnhanceStage(Stage):
                     videos.append(md_file)
 
             except Exception as e:
-                console.print(
-                    f"[yellow]⚠ Error loading {md_path.name}: {str(e)}[/yellow]"
-                )
+                console.print(f"[yellow]⚠ Error loading {md_path.name}: {e!s}[/yellow]")
 
         return videos
 
@@ -121,14 +120,14 @@ Enhanced Description:"""
                 max_tokens=self.max_tokens,
             )
 
-            enhanced = response.content[0].text if response.content else description
+            enhanced = first_text(response.content, default=description)
             return enhanced.strip()
 
         except Exception as e:
-            console.print(f"[yellow]⚠ Error enhancing description: {str(e)}[/yellow]")
+            console.print(f"[yellow]⚠ Error enhancing description: {e!s}[/yellow]")
             return description
 
-    async def run(self, target_date: date) -> Dict[str, Any]:
+    async def run(self, target_date: date) -> dict[str, Any]:
         """Enhance video descriptions and update markdown files.
 
         Args:
@@ -140,7 +139,7 @@ Enhanced Description:"""
         stage_dir = self.ensure_stage_dir(target_date)
 
         console.print(
-            f"[bold blue]✨ Enhancing videos for {target_date.strftime('%Y-%m-%d')}...[/bold blue]"
+            f"[bold blue]✨ Enhancing videos for {target_date:%Y-%m-%d}...[/bold blue]"
         )
 
         try:
@@ -149,17 +148,21 @@ Enhanced Description:"""
 
             if not videos:
                 console.print(
-                    f"[yellow]⚠ No videos with happiness >= {self.happiness_threshold} found[/yellow]"
+                    "[yellow]⚠ No videos with happiness >= "
+                    f"{self.happiness_threshold} found[/yellow]"
                 )
                 return {
                     "enhanced_videos": 0,
                     "errors": 0,
-                    "message": f"No videos with happiness >= {self.happiness_threshold}",
+                    "message": (
+                        f"No videos with happiness >= {self.happiness_threshold}"
+                    ),
                     "date": target_date.strftime("%Y-%m-%d"),
                 }
 
             console.print(
-                f"[green]✓ Loaded {len(videos)} videos from assess stage (happiness >= {self.happiness_threshold})[/green]"
+                f"[green]✓ Loaded {len(videos)} videos from assess stage "
+                f"(happiness >= {self.happiness_threshold})[/green]"
             )
 
             # Enhance each video
@@ -196,7 +199,7 @@ Enhanced Description:"""
                         video.update_frontmatter(
                             {
                                 "stage": "enhanced",
-                                "enhanced_at": datetime.utcnow().isoformat() + "Z",
+                                "enhanced_at": utc_now_iso(),
                                 "enhanced_description": enhanced_description,
                             }
                         )
@@ -210,7 +213,8 @@ Enhanced Description:"""
                         enhanced_count += 1
 
                     except Exception as e:
-                        error_msg = f"Error enhancing video {video.frontmatter.get('video_id', 'unknown')}: {str(e)}"
+                        video_id = video.frontmatter.get("video_id", "unknown")
+                        error_msg = f"Error enhancing video {video_id}: {e!s}"
                         errors.append(error_msg)
                         console.print(f"[red]✗ {error_msg}[/red]")
 
@@ -231,7 +235,7 @@ Enhanced Description:"""
             }
 
         except Exception as e:
-            error_msg = f"Fatal error in EnhanceStage: {str(e)}"
+            error_msg = f"Fatal error in EnhanceStage: {e!s}"
             console.print(f"[red]✗ {error_msg}[/red]")
             return {
                 "enhanced_videos": 0,

@@ -1,8 +1,9 @@
 """Configuration manager for loading YAML configuration files."""
 
-import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
+
+import yaml
 
 
 class ConfigManager:
@@ -15,11 +16,11 @@ class ConfigManager:
             base_path: Base directory containing configuration files
         """
         self.base_path = base_path
-        self._configs: Dict[str, Dict[str, Any]] = {}
+        self._configs: dict[str, dict[str, Any]] = {}
 
     def load_config(
-        self, config_name: str, override_path: Optional[Path] = None
-    ) -> Dict[str, Any]:
+        self, config_name: str, override_path: Path | None = None
+    ) -> dict[str, Any]:
         """Load a YAML configuration file.
 
         Args:
@@ -34,15 +35,12 @@ class ConfigManager:
             yaml.YAMLError: If the YAML is invalid
         """
         # Use override path if provided, otherwise use base path
-        if override_path:
-            config_path = override_path
-        else:
-            config_path = self.base_path / f"{config_name}.yaml"
+        config_path = override_path or self.base_path / f"{config_name}.yaml"
 
         if not config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-        with open(config_path, "r", encoding="utf-8") as f:
+        with config_path.open(encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         # Cache the config
@@ -50,7 +48,7 @@ class ConfigManager:
 
         return config
 
-    def get_config(self, config_name: str) -> Dict[str, Any]:
+    def get_config(self, config_name: str) -> dict[str, Any]:
         """Get a previously loaded configuration.
 
         Args:
@@ -68,7 +66,7 @@ class ConfigManager:
             )
         return self._configs[config_name]
 
-    def get_prompt_config(self, prompt_name: str) -> Dict[str, Any]:
+    def get_prompt_config(self, prompt_name: str) -> dict[str, Any]:
         """Get a specific prompt configuration.
 
         Args:
@@ -85,7 +83,7 @@ class ConfigManager:
             raise KeyError(f"Prompt '{prompt_name}' not found in prompts configuration")
         return prompts_config["prompts"][prompt_name]
 
-    def get_youtube_search(self, search_name: str) -> Dict[str, Any]:
+    def get_youtube_search(self, search_name: str) -> dict[str, Any]:
         """Get a specific YouTube search configuration.
 
         Args:

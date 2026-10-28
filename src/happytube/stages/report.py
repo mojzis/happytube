@@ -2,9 +2,9 @@
 
 from datetime import date
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from rich.console import Console
 
 from happytube.models.markdown import MarkdownFile
@@ -27,11 +27,14 @@ class ReportStage(Stage):
         self.template_dir = template_dir
         # Create Jinja2 environment
         if template_dir.exists():
-            self.env = Environment(loader=FileSystemLoader(str(template_dir)))
+            self.env = Environment(
+                loader=FileSystemLoader(str(template_dir)),
+                autoescape=select_autoescape(),
+            )
         else:
             self.env = None
 
-    def _load_enhanced_videos(self, target_date: date) -> List[Dict[str, Any]]:
+    def _load_enhanced_videos(self, target_date: date) -> list[dict[str, Any]]:
         """Load all enhanced videos for the target date.
 
         Args:
@@ -54,9 +57,7 @@ class ReportStage(Stage):
                 video_data["content"] = md_file.content
                 videos.append(video_data)
             except Exception as e:
-                console.print(
-                    f"[yellow]⚠ Error loading {md_path.name}: {str(e)}[/yellow]"
-                )
+                console.print(f"[yellow]⚠ Error loading {md_path.name}: {e!s}[/yellow]")
 
         # Sort by happiness score (highest first)
         videos.sort(key=lambda v: v.get("happiness_score", 0), reverse=True)
@@ -81,7 +82,7 @@ class ReportStage(Stage):
                     output_dir = Path("parquet") / stage_name / "by-run-date"
                     output_file = (
                         output_dir
-                        / f"{target_date.strftime('%Y-%m-%d')}_last_{days_back}_days.parquet"
+                        / f"{target_date:%Y-%m-%d}_last_{days_back}_days.parquet"
                     )
 
                     # Use Video model's method to export
@@ -92,10 +93,10 @@ class ReportStage(Stage):
                     )
             except Exception as e:
                 console.print(
-                    f"[yellow]⚠ Error exporting {stage_name} to parquet: {str(e)}[/yellow]"
+                    f"[yellow]⚠ Error exporting {stage_name} to parquet: {e!s}[/yellow]"
                 )
 
-    async def run(self, target_date: date) -> Dict[str, Any]:
+    async def run(self, target_date: date) -> dict[str, Any]:
         """Generate report for the date.
 
         Args:
@@ -105,7 +106,7 @@ class ReportStage(Stage):
             Dictionary containing execution statistics
         """
         console.print(
-            f"[bold blue]📊 Generating report for {target_date.strftime('%Y-%m-%d')}...[/bold blue]"
+            f"[bold blue]📊 Generating report for {target_date:%Y-%m-%d}...[/bold blue]"
         )
 
         try:
@@ -135,7 +136,8 @@ class ReportStage(Stage):
             # Generate HTML report
             if self.env is None:
                 console.print(
-                    "[yellow]⚠ Template directory not found, skipping HTML generation[/yellow]"
+                    "[yellow]⚠ Template directory not found, "
+                    "skipping HTML generation[/yellow]"
                 )
                 report_path = None
             else:
@@ -149,9 +151,7 @@ class ReportStage(Stage):
                     )
 
                     # Save report
-                    report_path = (
-                        self.stage_path / f"{target_date.strftime('%Y-%m-%d')}.html"
-                    )
+                    report_path = self.stage_path / f"{target_date:%Y-%m-%d}.html"
                     report_path.parent.mkdir(parents=True, exist_ok=True)
                     report_path.write_text(html, encoding="utf-8")
 
@@ -160,7 +160,7 @@ class ReportStage(Stage):
                     )
                 except Exception as e:
                     console.print(
-                        f"[yellow]⚠ Error generating HTML report: {str(e)}[/yellow]"
+                        f"[yellow]⚠ Error generating HTML report: {e!s}[/yellow]"
                     )
                     report_path = None
 
@@ -176,7 +176,7 @@ class ReportStage(Stage):
             }
 
         except Exception as e:
-            error_msg = f"Fatal error in ReportStage: {str(e)}"
+            error_msg = f"Fatal error in ReportStage: {e!s}"
             console.print(f"[red]✗ {error_msg}[/red]")
             return {
                 "videos_reported": 0,

@@ -20,6 +20,9 @@ from happytube.stages.report import ReportStage
 
 console = Console()
 
+MIN_HAPPINESS = 1
+MAX_HAPPINESS = 5
+
 
 def require_credentials(f):
     """Decorator to validate credentials before running a command."""
@@ -42,10 +45,10 @@ def parse_date(date_str: str | None) -> date:
         Parsed date object or today's date
     """
     if date_str is None:
-        return date.today()
+        return datetime.now().astimezone().date()
 
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d").date()
+        return date.fromisoformat(date_str)
     except ValueError:
         console.print(
             f"[red]✗ Invalid date format: {date_str}. Use YYYY-MM-DD format.[/red]"
@@ -71,7 +74,7 @@ def validate_credentials():
             )
             sys.exit(1)
     except Exception as e:
-        console.print(f"[red]✗ Configuration error: {str(e)}[/red]")
+        console.print(f"[red]✗ Configuration error: {e!s}[/red]")
         sys.exit(1)
 
 
@@ -158,13 +161,14 @@ def fetch(category: str, max_videos: int, date: str | None):
             )
         else:
             console.print(
-                f"\n[green bold]✓ Successfully fetched {result['new_videos']} videos![/green bold]"
+                "\n[green bold]✓ Successfully fetched "
+                f"{result['new_videos']} videos![/green bold]"
             )
 
         console.print(f"[dim]Stage directory: {result.get('stage_dir')}[/dim]")
 
     except Exception as e:
-        console.print(f"\n[red]✗ Fetch failed: {str(e)}[/red]")
+        console.print(f"\n[red]✗ Fetch failed: {e!s}[/red]")
         sys.exit(1)
 
 
@@ -205,7 +209,8 @@ def assess(date: str | None):
             )
         else:
             console.print(
-                f"\n[green bold]✓ Successfully assessed {result['assessed_videos']} videos![/green bold]"
+                "\n[green bold]✓ Successfully assessed "
+                f"{result['assessed_videos']} videos![/green bold]"
             )
 
         if "avg_happiness" in result:
@@ -216,7 +221,7 @@ def assess(date: str | None):
         console.print(f"[dim]Stage directory: {result.get('stage_dir')}[/dim]")
 
     except Exception as e:
-        console.print(f"\n[red]✗ Assess failed: {str(e)}[/red]")
+        console.print(f"\n[red]✗ Assess failed: {e!s}[/red]")
         sys.exit(1)
 
 
@@ -244,7 +249,7 @@ def enhance(threshold: int, date: str | None):
     """
     target_date = parse_date(date)
 
-    if threshold < 1 or threshold > 5:
+    if not MIN_HAPPINESS <= threshold <= MAX_HAPPINESS:
         console.print("[red]✗ Threshold must be between 1 and 5[/red]")
         sys.exit(1)
 
@@ -269,13 +274,14 @@ def enhance(threshold: int, date: str | None):
             )
         else:
             console.print(
-                f"\n[green bold]✓ Successfully enhanced {result['enhanced_videos']} videos![/green bold]"
+                "\n[green bold]✓ Successfully enhanced "
+                f"{result['enhanced_videos']} videos![/green bold]"
             )
 
         console.print(f"[dim]Stage directory: {result.get('stage_dir')}[/dim]")
 
     except Exception as e:
-        console.print(f"\n[red]✗ Enhance failed: {str(e)}[/red]")
+        console.print(f"\n[red]✗ Enhance failed: {e!s}[/red]")
         sys.exit(1)
 
 
@@ -323,7 +329,8 @@ def report(date: str | None, days_back: int):
             )
         else:
             console.print(
-                f"\n[green bold]✓ Successfully generated report for {result['videos_reported']} videos![/green bold]"
+                "\n[green bold]✓ Successfully generated report for "
+                f"{result['videos_reported']} videos![/green bold]"
             )
 
         if "avg_happiness" in result:
@@ -335,7 +342,7 @@ def report(date: str | None, days_back: int):
             console.print(f"[green]Report saved to: {result['report_path']}[/green]")
 
     except Exception as e:
-        console.print(f"\n[red]✗ Report failed: {str(e)}[/red]")
+        console.print(f"\n[red]✗ Report failed: {e!s}[/red]")
         sys.exit(1)
 
 
@@ -368,7 +375,7 @@ def report(date: str | None, days_back: int):
     help="Number of days to look back for analytics export",
 )
 @require_credentials
-def run_all(
+def run_all(  # noqa: PLR0915 - linear script driving all four stages
     category: str,
     max_videos: int,
     threshold: int,
@@ -466,7 +473,8 @@ def run_all(
         all_results["report"] = report_result
 
         console.print(
-            f"[green]✓ Generated report for {report_result['videos_reported']} videos[/green]\n"
+            "[green]✓ Generated report for "
+            f"{report_result['videos_reported']} videos[/green]\n"
         )
 
         # Final summary
@@ -493,7 +501,7 @@ def run_all(
         console.print("\n[yellow]⚠ Pipeline interrupted by user[/yellow]")
         sys.exit(1)
     except Exception as e:
-        console.print(f"\n[red]✗ Pipeline failed: {str(e)}[/red]")
+        console.print(f"\n[red]✗ Pipeline failed: {e!s}[/red]")
         sys.exit(1)
 
 

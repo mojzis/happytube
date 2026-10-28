@@ -1,13 +1,14 @@
 """Fetch stage - retrieves videos from YouTube."""
 
-from datetime import date, datetime
-from typing import Dict, Any
+from datetime import date
+from typing import Any
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from happytube.models.markdown import MarkdownFile
 from happytube.stages.base import Stage
+from happytube.utils import utc_now_iso
 from happytube.videos import Search
 
 console = Console()
@@ -17,7 +18,7 @@ class FetchStage(Stage):
     """Fetches videos from YouTube and stores as markdown files."""
 
     def __init__(
-        self, youtube_config: Dict[str, Any] | None = None, max_videos: int = 50
+        self, youtube_config: dict[str, Any] | None = None, max_videos: int = 50
     ):
         """Initialize FetchStage.
 
@@ -29,7 +30,7 @@ class FetchStage(Stage):
         self.youtube_config = youtube_config or {}
         self.max_videos = max_videos
 
-    async def run(self, target_date: date) -> Dict[str, Any]:
+    async def run(self, target_date: date) -> dict[str, Any]:
         """Fetch videos and save as markdown files.
 
         Args:
@@ -41,7 +42,7 @@ class FetchStage(Stage):
         stage_dir = self.ensure_stage_dir(target_date)
 
         console.print(
-            f"[bold blue]🔍 Fetching videos for {target_date.strftime('%Y-%m-%d')}...[/bold blue]"
+            f"[bold blue]🔍 Fetching videos for {target_date:%Y-%m-%d}...[/bold blue]"
         )
 
         try:
@@ -93,7 +94,7 @@ class FetchStage(Stage):
                             "channel": row.get("channel_title", ""),
                             "channel_id": row.get("channel_id", ""),
                             "published_at": row.get("published_at", ""),
-                            "fetched_at": datetime.utcnow().isoformat() + "Z",
+                            "fetched_at": utc_now_iso(),
                             "stage": "fetched",
                             "script_type": row.get("script", ""),
                         }
@@ -108,7 +109,8 @@ class FetchStage(Stage):
                         saved_count += 1
 
                     except Exception as e:
-                        error_msg = f"Error saving video {row.get('video_id', 'unknown')}: {str(e)}"
+                        video_id = row.get("video_id", "unknown")
+                        error_msg = f"Error saving video {video_id}: {e!s}"
                         errors.append(error_msg)
                         console.print(f"[red]✗ {error_msg}[/red]")
 
@@ -129,7 +131,7 @@ class FetchStage(Stage):
             }
 
         except Exception as e:
-            error_msg = f"Fatal error in FetchStage: {str(e)}"
+            error_msg = f"Fatal error in FetchStage: {e!s}"
             console.print(f"[red]✗ {error_msg}[/red]")
             return {
                 "new_videos": 0,

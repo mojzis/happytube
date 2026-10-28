@@ -1,9 +1,9 @@
 """Base class for all processing stages."""
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from datetime import date
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any
 
 
 class Stage(ABC):
@@ -44,7 +44,7 @@ class Stage(ABC):
         return stage_dir
 
     @abstractmethod
-    async def run(self, target_date: date) -> Dict[str, Any]:
+    async def run(self, target_date: date) -> dict[str, Any]:
         """Run the stage processing.
 
         Args:

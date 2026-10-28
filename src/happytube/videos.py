@@ -6,17 +6,21 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from http import HTTPStatus
+from pathlib import Path
 
 import pandas as pd
 import requests
 
 from happytube.utils import determine_text_script
 
+REQUEST_TIMEOUT_S = 30
+
 
 @dataclass
 class YtQuery:
-    name: str = None
-    url: str = None
+    name: str = ""
+    url: str = ""
     params: dict = field(default_factory=dict)
     data: list = field(default_factory=list)
     variant: str = "def"
@@ -28,18 +32,18 @@ class YtQuery:
         self.params["key"] = self.key
 
     def get(self):
-        response = requests.get(self.url, params=self.params)
-        if response.status_code == 200:
+        response = requests.get(self.url, params=self.params, timeout=REQUEST_TIMEOUT_S)
+        if response.status_code == HTTPStatus.OK:
             self.data = response.json()["items"]
         else:
             logging.error(f"Error: {response.status_code}")
 
     def store_locally(self):
-        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        dir = f"data/fetched/{self.name}"
-        os.makedirs(dir, exist_ok=True)
-        file_path = f"{dir}/{current_time}_{self.variant}.json"
-        with open(file_path, "w") as f:
+        current_time = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M")
+        out_dir = Path("data/fetched") / self.name
+        out_dir.mkdir(parents=True, exist_ok=True)
+        file_path = f"{out_dir}/{current_time}_{self.variant}.json"
+        with Path(file_path).open("w") as f:
             json.dump(self.data, f, indent=4)
         return file_path
 
@@ -56,7 +60,6 @@ class Search(YtQuery):
             "part": "snippet",
             "maxResults": 50,
             "type": "video",
-            # "channelId": "UCwmZiChSryoWQCZMIQezgTg",  # "bbcearth",
             "safeSearch": "strict",
             "order": "viewCount",  # "rating", relevance
             "regionCode": "CZ",
@@ -76,7 +79,6 @@ class Search(YtQuery):
             script=data["title"].apply(determine_text_script),
         )
 
-        # ['publishedAt', 'channelId', 'title', 'description', 'thumbnails','channelTitle', 'liveBroadcastContent', 'publishTime', 'video_id']
         return out[
             [
                 "video_id",
@@ -111,7 +113,6 @@ class Videos(YtQuery):
             "part": "contentDetails,id,player,snippet,statistics,topicDetails",
             "maxResults": 50,
             "chart": "mostPopular",
-            # "regionCode": "CZ",
             "videoCategoryId": 15,
         }
 

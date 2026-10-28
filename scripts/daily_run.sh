@@ -65,10 +65,10 @@ if uv run happytube run-all \
         # Uncomment to automatically export and deploy to GitHub Pages
         # log "Exporting to web player..."
         # uv run python -m happytube.web.export 2>&1 | tee -a "$LOG_FILE"
-        # if [ -d "happytube/web/static" ]; then
+        # if [ -d "src/happytube/web/static" ]; then
         #     log "Web export completed"
         #     # You can add git commands here to commit and push
-        #     # cd happytube/web/static && git add . && git commit -m "Update $DATE" && git push
+        #     # cd src/happytube/web/static && git add . && git commit -m "Update $DATE" && git push
         # fi
 
         log "========================================="
