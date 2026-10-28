@@ -13,7 +13,6 @@
       <tbody>
       {% for e in rows %}
         {% set vet = e.latest_vet.report if e.latest_vet else none %}
-        {% set human = e.reviews|selectattr("role", "equalto", "human")|list|length %}
         <tr{% if needs_attention(e) %} class="attention"{% endif %}>
           <td><a href="/channels/{{ e.channel.slug }}">{{ e.channel.name }}</a><br><span class="slug">{{ e.channel.slug }}</span></td>
           <td>{{ e.channel.kind }}</td>
@@ -25,7 +24,7 @@
             {% else %}<span class="muted">not vetted</span>{% endif %}
           </td>
           <td>{% if vet %}{{ vet.suitable_count }}/{{ vet.videos|length }}{% else %}—{% endif %}</td>
-          <td>{{ human }} / {{ e.reviews|length - human }}</td>
+          <td>{{ e.human_review_count }} / {{ e.agent_review_count }}</td>
         </tr>
       {% endfor %}
       </tbody>
