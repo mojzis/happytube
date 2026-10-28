@@ -74,3 +74,13 @@ branch; merge only after the user says so.
   `cli/channels.py`; share one helper.
 - `channels list` table truncates kind/name at 80 columns without a TTY.
 - Seed handles: only `@bbcearth`, `@NatGeo` set; phase 2 resolves the rest.
+
+## Backlog (from phase 2, not scheduled)
+
+- Open content questions live in the registry as agent `unsure` reviews
+  (`channels list --needs-human-review`, `channels show <slug>`): ct-decko and
+  zoo-zlin handles, national-park-service identity, zoo-dvur-kralove activity.
+- Make the tool surface these itself instead of hand-written notes: phase 3 vetting
+  (or `resolve`/`evidence`) should flag unresolved handles, inactive channels
+  (newest upload > 12 months) and look-alike channels (low subscribers vs the
+  name, as `@NatureonPBS` was) as agent reviews; phase 4 queue shows them first.

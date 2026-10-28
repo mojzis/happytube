@@ -1,0 +1,7 @@
+reviewer: claude-orchestrator
+role: agent
+verdict: unsure
+notes: 'Handle unknown: @ctdecko not found by forHandle (phase 2). Human: find the
+  official ČT :D / Déčko channel handle, set it in channel.yaml, then run ''channels
+  resolve ct-decko''.'
+created_at: '2026-10-28T19:07:44.992903Z'
