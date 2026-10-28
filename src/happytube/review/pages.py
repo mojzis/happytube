@@ -1,6 +1,5 @@
 """Rendering and request helpers shared by the channel and video review routes."""
 
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote
@@ -12,16 +11,11 @@ from fastapi.templating import Jinja2Templates
 
 from happytube.review.queue import is_unresolved, needs_attention
 from happytube.trusted.stages import is_video_id
+from happytube.utils import fmt_utc
 
 PACKAGE_DIR = Path(__file__).parent
 REVIEWER_COOKIE = "happytube_reviewer"
 COOKIE_MAX_AGE = 365 * 24 * 3600
-
-
-def _fmt_dt(value: datetime | None) -> str:
-    if value is None:
-        return "—"
-    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def _fmt_int(value: int | None) -> str:
@@ -55,7 +49,7 @@ def _templates() -> Jinja2Templates:
     )
     # Typed as Any: ty infers jinja's defaults dicts too narrowly to add to them.
     filters: dict[str, Any] = {
-        "dt": _fmt_dt,
+        "dt": fmt_utc,
         "num": _fmt_int,
         "duration": _fmt_duration,
         "pct": _fmt_pct,

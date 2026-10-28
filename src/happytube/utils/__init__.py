@@ -22,6 +22,13 @@ def iso_z(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
+def fmt_utc(value: datetime | None) -> str:
+    """A time for people: ``2026-10-28 12:00 UTC`` (``—`` for none)."""
+    if value is None:
+        return "—"
+    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 

@@ -43,6 +43,19 @@ from happytube.trusted.video_reviews import (
     WATCHED,
     VideoReviewStore,
 )
+from happytube.utils import fmt_utc
+
+
+def _agent(suitable: bool) -> str:
+    return "suitable" if suitable else "unsuitable"
+
+
+def _or_dash(value: object) -> str:
+    return "—" if value is None else str(value)
+
+
+def _version(value: int | None) -> str:
+    return "—" if value is None else f"v{value}"
 
 
 @dataclass(frozen=True)
@@ -119,32 +132,36 @@ def list_videos(dirs: _Dirs, section: str | None, as_json: bool) -> None:
 @store_errors_as_click
 def show_video(dirs: _Dirs, video_id: str, as_json: bool) -> None:
     """Show a video: the agent's call, what the player does, every review."""
-    detail = dirs.get(video_id).detail_dict()
+    video = dirs.get(video_id)
+    detail = video.detail_dict()
     if as_json:
         echo_json(detail)
         return
-    a = detail["assess"]
+    a = video.assess
     lines = [
-        f"{detail['video_id']}: {detail['title']}",
-        f"channel: {detail['channel_name']} ({detail['channel_slug']})",
-        f"https://www.youtube.com/watch?v={detail['video_id']}",
-        f"agent: {'suitable' if a['suitable'] else 'unsuitable'} — calm "
-        f"{a['calm']}, happy {a['happy']}, flags {', '.join(a['flags']) or 'none'}"
-        f", rubric v{a['rubric_version']}, assessed {a['assessed_at']}",
-        f"note: {a['note']}",
-        f"player: {'shown' if detail['shown'] else 'not shown'}",
-        f"section: {detail['section']}",
+        f"{a.video_id}: {a.title}",
+        f"channel: {a.channel_name} ({a.channel_slug})",
+        f"https://www.youtube.com/watch?v={a.video_id}",
+        f"agent: {_agent(a.suitable)} — calm {_or_dash(a.calm)}, happy "
+        f"{_or_dash(a.happy)}, flags {', '.join(a.flags) or 'none'}, rubric "
+        f"{_version(a.rubric_version)}, assessed {fmt_utc(a.assessed_at)}",
+        f"note: {a.note or '—'}",
+        f"player: {'shown' if video.shown else 'not shown'}",
+        f"section: {video.section}",
     ]
-    if detail["review_error"]:
-        lines.append(f"unreadable review (video hidden): {detail['review_error']}")
-    lines.append(f"\nreviews ({len(detail['reviews'])})")
+    if a.incomplete:
+        lines.append(f"incomplete assess: lacks {', '.join(a.missing())}")
+    if video.state.error:
+        lines.append(f"unreadable review (video hidden): {video.state.error}")
+    lines.append(f"\nreviews ({len(video.state.reviews)})")
     lines.extend(
-        f"  {r['created_at']}  {r['reviewer']} ({r['role']}): {r['verdict']}, "
-        f"watched {r['watched']}"
-        + (f", flags {', '.join(r['flags'])}" if r["flags"] else "")
-        + f" — vs agent {'suitable' if r['agent_suitable'] else 'unsuitable'}"
-        + (f" — {r['notes']}" if r["notes"] else "")
-        for r in detail["reviews"]
+        f"  {fmt_utc(r.created_at)}  {r.reviewer} ({r.role}): {r.verdict}, "
+        f"watched {r.watched}"
+        + (f", flags {', '.join(r.flags)}" if r.flags else "")
+        + f" — vs agent {_agent(r.agent_suitable)}"
+        + (" (rescored since)" if video.rescored(r) else "")
+        + (f" — {r.notes}" if r.notes else "")
+        for r in video.state.reviews
     )
     print_lines(lines)
 

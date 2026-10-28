@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 
 import pytest
 from click.testing import CliRunner
@@ -131,6 +132,14 @@ def test_show_plain(run):
     result = run("show", vid(1))
     assert result.exit_code == 0
     assert "mojzis (human): unsuitable" in result.output
+    assert "assessed 2026-10-27 12:00 UTC" in result.output
+
+
+def test_show_plain_times_are_minutes_not_microseconds(run):
+    _review(run, 1)
+    output = run("show", vid(1)).output
+    assert re.search(r"^  \d{4}-\d\d-\d\d \d\d:\d\d UTC  mojzis", output, re.M)
+    assert not re.search(r"\d\d:\d\d:\d\d\.\d+", output)
 
 
 def test_stats_json(run):
