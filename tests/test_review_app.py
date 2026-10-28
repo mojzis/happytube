@@ -150,6 +150,21 @@ def test_detail_shows_channel_evidence_vet_and_reviews(app, store):
     assert 'class="review role-agent"' in html
 
 
+def test_detail_has_next_channel_button_and_watchable(app):
+    html = app.get(detail_url("zoo-praha")).text
+    assert (
+        '<a class="button" href="/channels/ct-decko">Next: ČT :D / Déčko →</a>' in html
+    )
+    assert "~392 videos" in html
+
+
+def test_queue_shows_watchable_estimate_for_approved(app, store):
+    assert "No approved channels yet" in app.get(QUEUE).text
+    store.add_review("zoo-praha", review("approve"))
+    html = app.get(QUEUE).text
+    assert "~392 watchable videos</strong> in 1 approved channel" in html
+
+
 def test_detail_without_evidence_or_vet(app):
     html = app.get(detail_url("ct-decko")).text
     assert "No evidence yet." in html

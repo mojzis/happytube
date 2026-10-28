@@ -95,3 +95,11 @@ fieldset { border: 1px solid var(--line); border-radius: 4px; }
 .error-message { color: var(--no); font-weight: 600; }
 .htmx-error { white-space: pre-wrap; }
 .filters .htmx-error { flex-basis: 100%; margin: 0; }
+
+.estimate { margin: 0 0 1rem; }
+.next-channel { display: flex; gap: 1.25rem; align-items: center; margin: 1.5rem 0 2rem; }
+a.button {
+  padding: 0.5rem 1.2rem; border: 1px solid #333; border-radius: 4px;
+  background: #234; color: #fff; text-decoration: none; font-size: 1.1rem;
+}
+a.button:hover, a.button:focus { background: #345; }

@@ -1,7 +1,12 @@
 """The review queue order (pure ``queue_sections``)."""
 
 from happytube.channels.store import ChannelStore
-from happytube.review.queue import is_unresolved, needs_attention, queue_sections
+from happytube.review.queue import (
+    is_unresolved,
+    needs_attention,
+    next_entry,
+    queue_sections,
+)
 from tests.review_helpers import chan, review, seed_vetted
 from tests.vet_helpers import make_evidence, seed
 
@@ -87,3 +92,26 @@ def test_attention_rules(tmp_path):
         "no-id",
         "flagged",
     }
+
+
+def test_next_entry_follows_needs_review_order_and_wraps(tmp_path):
+    store = ChannelStore(tmp_path)
+    seed_vetted(store, "a", "A")
+    seed_vetted(store, "b", "B")
+    seed_vetted(store, "done", "Done")
+    store.add_review("done", review("approve"))
+    entries = store.entries()
+
+    def next_slug(slug):
+        upcoming = next_entry(entries, slug)
+        return upcoming.channel.slug if upcoming else None
+
+    assert next_slug("a") == "b"
+    assert next_slug("b") == "a"  # wraps
+    assert next_slug("done") == "a"  # reviewed → first pending
+
+
+def test_next_entry_none_when_nothing_else_pending(tmp_path):
+    store = ChannelStore(tmp_path)
+    seed_vetted(store, "only", "Only")
+    assert next_entry(store.entries(), "only") is None

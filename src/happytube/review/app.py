@@ -35,7 +35,13 @@ from happytube.channels.store import (
     filter_entries,
 )
 from happytube.channels.vet import long_form
-from happytube.review.queue import is_unresolved, needs_attention, queue_sections
+from happytube.review.estimate import channel_watchable, watchable_estimate
+from happytube.review.queue import (
+    is_unresolved,
+    needs_attention,
+    next_entry,
+    queue_sections,
+)
 
 PACKAGE_DIR = Path(__file__).parent
 REVIEWER_COOKIE = "happytube_reviewer"
@@ -263,6 +269,7 @@ class _Pages:
         entry: ChannelEntry,
         form: dict[str, str] | None = None,
         error: str | None = None,
+        next_channel: ChannelEntry | None = None,
     ) -> dict[str, Any]:
         blank_form = {"reviewer": self.reviewer_prefill(request), "notes": ""}
         return {
@@ -274,6 +281,8 @@ class _Pages:
             "form": form or blank_form,
             "error": error,
             "verdicts": VERDICTS,
+            "watchable": channel_watchable(entry),
+            "next_channel": next_channel,
         }
 
 
@@ -347,6 +356,7 @@ def create_app(
                 )
             ),
             "total": len(entries),
+            "estimate": watchable_estimate(entries),
             "filters": filters,
             "statuses": STATUSES,
             "kinds": KINDS,
@@ -359,7 +369,9 @@ def create_app(
 
     @app.get("/channels/{slug}")
     def detail(request: Request, slug: str) -> HTMLResponse:
-        context = pages.detail_context(request, store.get(slug))
+        entry = store.get(slug)
+        upcoming = next_entry(store.entries(), slug)
+        context = pages.detail_context(request, entry, next_channel=upcoming)
         return pages.render(request, "channel.html", context)
 
     @app.post("/channels/{slug}/reviews", response_model=None)

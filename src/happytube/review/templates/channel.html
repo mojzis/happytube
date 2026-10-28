@@ -49,6 +49,7 @@
     <dt>Summary</dt><dd class="text">{{ r.summary or "—" }}</dd>
     <dt>Concerns</dt><dd>{% if r.concerns %}<ul>{% for c in r.concerns %}<li>{{ c }}</li>{% endfor %}</ul>{% else %}none{% endif %}</dd>
     <dt>Suitable</dt><dd>{{ r.suitable_count }}/{{ r.videos|length }} long-form; {{ r.shorts_skipped }} Shorts skipped</dd>
+    <dt>Watchable</dt><dd>{% if watchable is not none %}~{{ watchable|num }} videos <span class="muted">(estimate: uploads × long-form share × suitable share)</span>{% else %}—{% endif %}</dd>
     <dt>Vetted</dt><dd>{{ r.vetted_at|dt }} by {{ r.model }} (prompt v{{ r.prompt_version }}), snapshot {{ r.evidence_at|dt }}</dd>
     <dt>File</dt><dd class="path">{{ vet.path }}</dd>
   </dl>
@@ -76,4 +77,13 @@
 </section>
 
 {% include "_reviews.html" %}
+
+<nav class="next-channel">
+  {% if next_channel %}
+  <a class="button" href="/channels/{{ next_channel.channel.slug }}">Next: {{ next_channel.channel.name }} →</a>
+  {% else %}
+  <span class="muted">No other channel needs a review.</span>
+  {% endif %}
+  <a href="/channels">back to the queue</a>
+</nav>
 {% endblock %}

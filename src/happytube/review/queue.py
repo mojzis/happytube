@@ -60,3 +60,14 @@ def queue_sections(entries: list[ChannelEntry]) -> QueueSections:
         needs_review=sorted(pending, key=_needs_review_key),
         reviewed=sorted(done, key=_reviewed_key),
     )
+
+
+def next_entry(entries: list[ChannelEntry], slug: str) -> ChannelEntry | None:
+    """The channel to review after ``slug``: the next one still needing a human
+    review in queue order (wrapping round), never ``slug`` itself; ``None`` when no
+    other channel needs one."""
+    pending = queue_sections(entries).needs_review
+    slugs = [e.channel.slug for e in pending]
+    start = slugs.index(slug) + 1 if slug in slugs else 0
+    rotated = pending[start:] + pending[:start]
+    return next((e for e in rotated if e.channel.slug != slug), None)

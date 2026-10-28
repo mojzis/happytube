@@ -2,6 +2,15 @@
 {% block title %}Queue{% endblock %}
 {% block content %}
 <h1>Channel queue</h1>
+<p class="estimate">
+  {% if estimate.channels %}
+  <strong>~{{ estimate.videos|num }} watchable videos</strong> in {{ estimate.channels }} approved channel{{ "s" if estimate.channels != 1 }}
+  {% if estimate.estimated_channels < estimate.channels %}({{ estimate.channels - estimate.estimated_channels }} without evidence or vet, not counted){% endif %}
+  <span class="muted">— estimate: uploads × long-form share × suitable share; {{ estimate.sampled_suitable }} judged suitable so far.</span>
+  {% else %}
+  <span class="muted">No approved channels yet, so no watchable videos.</span>
+  {% endif %}
+</p>
 <form class="filters" method="get" action="/channels"
       hx-get="/channels" hx-target="#queue" hx-swap="outerHTML" hx-push-url="true"
       hx-trigger="change, submit">
