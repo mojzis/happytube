@@ -1,6 +1,7 @@
 """Trusted assess and enhance on hand-made fetch files (fake Claude, no network)."""
 
 import asyncio
+import logging
 from datetime import date
 
 import pytest
@@ -216,6 +217,24 @@ def test_enhance_with_nothing_suitable_makes_no_client(base):
 def test_stage_run_is_not_the_entry_point(base):
     with pytest.raises(NotImplementedError):
         asyncio.run(TrustedStage("fetch", base).run(DAY))
+
+
+def test_stage_days_warns_about_non_date_dirs(base, caplog):
+    stage = TrustedStage("assess", base)
+    (stage.stage_path / "2026-10-27").mkdir(parents=True)
+    (stage.stage_path / "2026-10-28").mkdir()
+    (stage.stage_path / "notes").mkdir()
+    (stage.stage_path / "20261026").mkdir()
+    (stage.stage_path / "README").write_text("not a dir")
+
+    with caplog.at_level(logging.WARNING, logger="happytube.trusted.stages"):
+        days = stage.days()
+
+    assert days == [date(2026, 10, 27), date(2026, 10, 28)]
+    warned = sorted(r.getMessage() for r in caplog.records)
+    assert len(warned) == 2
+    assert str(stage.stage_path / "20261026") in warned[0]
+    assert str(stage.stage_path / "notes") in warned[1]
 
 
 def test_assess_picks_up_earlier_dates_and_writes_under_them(base):
