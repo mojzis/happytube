@@ -2,7 +2,8 @@
 
 Shared by the ``channels resolve`` / ``channels evidence`` commands and, later, by
 scheduled refreshes. No click or rich here. Per-channel problems become results;
-only a used-up quota stops a run early (``Run.aborted``), keeping what was written.
+only a used-up quota or a rejected key stops a run early (``Run.aborted``), keeping
+what was written.
 """
 
 from dataclasses import asdict, dataclass, field
@@ -10,13 +11,13 @@ from typing import Any, Literal
 
 from happytube.channels.evidence import build_evidence, upload_video_ids
 from happytube.channels.store import ChannelIdMismatchError, ChannelStore
-from happytube.youtube import QuotaExceededError, YouTubeClient, YouTubeError
+from happytube.youtube import RunStoppingError, YouTubeClient, YouTubeError
 
 ResultStatus = Literal[
     "resolved", "already", "not_found", "no_handle", "mismatch", "error", "written"
 ]
 FAILURE_STATUSES: frozenset[str] = frozenset({"mismatch", "error"})
-_NOT_FETCHED = "not fetched: YouTube quota exceeded"
+_NOT_FETCHED = "not fetched: run stopped (quota used up or key rejected)"
 
 
 @dataclass
@@ -36,7 +37,7 @@ class Run:
     """Outcome of a resolve or evidence run over several channels."""
 
     results: list[ChannelResult] = field(default_factory=list)
-    aborted: str | None = None  # set when the quota ran out mid-run
+    aborted: str | None = None  # set when quota or key failed mid-run
     quota_units: int = 0
 
     @property
@@ -58,7 +59,7 @@ def _resolve(
 ) -> ChannelResult:
     """Resolve one channel's handle; ``verify`` re-checks an already set id.
 
-    Raises ``QuotaExceededError``; other API errors become an ``error`` result.
+    Raises ``RunStoppingError``; other API errors become an ``error`` result.
     """
     channel = store.get_channel(slug)
     result = ChannelResult(slug, "already", channel.handle, channel.channel_id)
@@ -70,7 +71,7 @@ def _resolve(
         return result
     try:
         found = client.resolve_handle(channel.handle)
-    except QuotaExceededError:
+    except RunStoppingError:
         raise
     except YouTubeError as e:
         result.status, result.message = "error", str(e)
@@ -98,7 +99,7 @@ def resolve_channels(
     for slug in slugs:
         try:
             run.results.append(_resolve(store, client, slug, verify=True))
-        except QuotaExceededError as e:
+        except RunStoppingError as e:
             run.results.append(ChannelResult(slug, "error", message=str(e)))
             run.aborted = str(e)
             break
@@ -138,8 +139,8 @@ def collect_evidence(
 ) -> Run:
     """Resolve where ``channel_id`` is missing, then write one snapshot per channel.
 
-    If the quota runs out, snapshots already written stay; every channel not yet
-    fetched is reported as an ``error``.
+    If the run stops (quota, bad key), snapshots already written stay; every
+    channel not yet fetched is reported as an ``error``.
     """
     run = Run()
     try:
@@ -149,7 +150,7 @@ def collect_evidence(
         ready = [r for r in run.results if r.status in {"resolved", "already"}]
         try:
             items = _fetch_channels(client, ready)
-        except QuotaExceededError:
+        except RunStoppingError:
             raise
         except YouTubeError as e:
             items = {}
@@ -164,11 +165,11 @@ def collect_evidence(
                 continue
             try:
                 _snapshot(store, client, result, item, max_videos)
-            except QuotaExceededError:
+            except RunStoppingError:
                 raise
             except YouTubeError as e:
                 result.status, result.message = "error", str(e)
-    except QuotaExceededError as e:
+    except RunStoppingError as e:
         run.aborted = str(e)
         for result in run.results:
             if result.status in {"resolved", "already"} or (

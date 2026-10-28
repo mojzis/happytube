@@ -31,6 +31,7 @@ class FakeYouTube:
             "UUbbc": [("b1", "PT1H")],
         }
         self.quota = quota
+        self.stop_body = QUOTA_BODY  # error once the quota is used up
         self.calls: list[str] = []
 
     def __call__(self, url, params, timeout):
@@ -38,7 +39,7 @@ class FakeYouTube:
         endpoint = url.rsplit("/", 1)[-1]
         self.calls.append(endpoint)
         if len(self.calls) > self.quota:
-            return _response(QUOTA_BODY, 403, "Forbidden")
+            return _response(self.stop_body, 403, "Forbidden")
         if endpoint == "playlistItems" and params["playlistId"] not in self.uploads:
             return _response({"error": {"message": "gone"}}, 404, "Not Found")
         return _response(getattr(self, f"_{endpoint}")(params))
@@ -236,3 +237,17 @@ def test_evidence_playlist_error_is_reported(registry, youtube):
 def test_list_and_show_work_without_keys(registry):
     assert registry("list", "--json").exit_code == 0
     assert registry("show", "zoo-zlin").exit_code == 0
+
+
+def test_invalid_key_stops_after_first_call(registry, youtube):
+    youtube.quota = 0
+    youtube.stop_body = {
+        "error": {
+            "message": "API key not valid.",
+            "details": [{"reason": "API_KEY_INVALID"}],
+        }
+    }
+    result = registry("resolve", "--all", "--json")
+    assert result.exit_code == 1
+    assert "API key not valid" in result.stderr
+    assert youtube.calls == ["channels"]

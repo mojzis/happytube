@@ -48,8 +48,16 @@ class YouTubeAPIError(YouTubeError):
         self.error_reason = error_reason
 
 
-class QuotaExceededError(YouTubeAPIError):
+class RunStoppingError(YouTubeAPIError):
+    """Every further request would fail the same way; stop the run."""
+
+
+class QuotaExceededError(RunStoppingError):
     """The daily API quota is used up; nothing more can be fetched today."""
+
+
+class InvalidKeyError(RunStoppingError):
+    """YouTube rejected the API key (wrong, revoked or API not enabled)."""
 
 
 class YouTubeConnectionError(YouTubeError):
@@ -65,11 +73,32 @@ def api_error_detail(response: requests.Response) -> str:
 
 
 def _api_error_reason(response: requests.Response) -> str:
-    """Return ``error.errors[0].reason`` (e.g. ``quotaExceeded``), or ``""``."""
+    """Machine-readable reason of a YouTube error body, or ``""``.
+
+    ``error.details[].reason`` (``API_KEY_INVALID``, …) wins over the coarser
+    ``error.errors[0].reason`` (``quotaExceeded``, ``badRequest``, …).
+    """
     try:
-        return str(response.json()["error"]["errors"][0]["reason"])
-    except (ValueError, KeyError, TypeError, IndexError):
+        error = response.json()["error"]
+    except (ValueError, KeyError, TypeError):
         return ""
+    if not isinstance(error, dict):
+        return ""
+    for detail in error.get("details") or []:
+        if isinstance(detail, dict) and detail.get("reason"):
+            return str(detail["reason"])
+    try:
+        return str(error["errors"][0]["reason"])
+    except (KeyError, TypeError, IndexError):
+        return ""
+
+
+_STOPPING_REASONS: dict[str, type[YouTubeAPIError]] = {
+    "quotaExceeded": QuotaExceededError,
+    "API_KEY_INVALID": InvalidKeyError,
+    "API_KEY_SERVICE_BLOCKED": InvalidKeyError,
+    "SERVICE_DISABLED": InvalidKeyError,
+}
 
 
 def parse_duration(value: str) -> int:
@@ -115,9 +144,7 @@ class YouTubeClient:
             raise YouTubeConnectionError(msg) from None
         if response.status_code != HTTPStatus.OK:
             reason = _api_error_reason(response)
-            error_cls = (
-                QuotaExceededError if reason == "quotaExceeded" else YouTubeAPIError
-            )
+            error_cls = _STOPPING_REASONS.get(reason, YouTubeAPIError)
             raise error_cls(
                 endpoint,
                 response.status_code,

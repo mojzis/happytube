@@ -7,7 +7,9 @@ from pydantic import ValidationError
 from happytube.config.settings import YouTubeSettings
 from happytube.youtube import (
     API_BASE,
+    InvalidKeyError,
     QuotaExceededError,
+    RunStoppingError,
     YouTubeAPIError,
     YouTubeClient,
     YouTubeConnectionError,
@@ -188,3 +190,17 @@ def test_youtube_settings_needs_only_ytkey(tmp_path, monkeypatch):
         YouTubeSettings()
     (tmp_path / ".env").write_text("YTKEY=from-env-file\nOTHER=1\n")
     assert YouTubeSettings().youtube_api_key == "from-env-file"
+
+
+def test_invalid_key_is_run_stopping():
+    body = {
+        "error": {
+            "message": "API key not valid. Please pass a valid API key.",
+            "errors": [{"reason": "badRequest"}],
+            "details": [{"reason": "API_KEY_INVALID"}],
+        }
+    }
+    get = FakeGet(_response(400, body, reason="Bad Request"))
+    with pytest.raises(InvalidKeyError, match="API key not valid") as exc:
+        YouTubeClient(KEY, get=get).resolve_handle("@x")
+    assert isinstance(exc.value, RunStoppingError)
