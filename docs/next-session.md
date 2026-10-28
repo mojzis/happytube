@@ -4,28 +4,23 @@ _Updated 2026-10-28._
 
 ## Where we are
 
-- Plan: `docs/plan.md` (phases 0–5 + backlog).
-- Phases 0–4 merged (PRs #6, #7, #9, #10, phase 4 PR). **Phase 4 done** (web review UI).
-  - `happytube serve [--host 127.0.0.1] [--port 8000] [--channels-dir …]
-    [--reviewer NAME]` — FastAPI + htmx app in `src/happytube/review/`, no keys.
-  - Queue: *Needs human review* first (attention = vet flags or unresolved, then
-    vet verdict unsure → reject → approve → not vetted), then *Reviewed*. Filters
-    status / kind / language (htmx, plain GET works too).
-  - Detail: channel, latest evidence ("resolved to" title prominent), latest vet
-    (summary, concerns, video table with thumbnails, read-only), all reviews.
-  - Review form writes the same `Review` records as `channels review`
-    (`role: human`) via `ChannelStore.add_review`; reviewer name remembered in a
-    cookie, default `--reviewer` / `HAPPYTUBE_REVIEWER`.
-  - Local only, no auth: Host allow-list (DNS rebinding), Origin /
-    Sec-Fetch-Site check on POST, wildcard binds refused, htmx 2.0.11 vendored.
-  - Decision 0007. Tests 298 → 398+, coverage 75% → 78%. Browser-checked by QA.
-  - Record: `docs/phases/phase-4/` (log.md, learnings.md).
+- Plan: `docs/plan.md` (phases 0–4 done, 5 split into 5a/5b/5c, backlog).
+- Phases 0–4 merged (PRs #6, #7, #9, #10, #11). Phase 4 = local review UI
+  (`happytube serve`, decision 0007, record `docs/phases/phase-4/`).
+- Registry: 11 approved channels (bbc-earth, cincinnati-zoo, explore-org,
+  monterey-bay-aquarium, nat-geo-kids, national-park-service, pbs-nature,
+  san-diego-zoo, smithsonian-channel, zoo-dvur-kralove, zoo-praha), 2 rejected,
+  2 candidates (ct-decko, zoo-zlin).
+- **Phase 5a planned, not started.** Branch `phase-5a-trusted-fetch` (pushed,
+  `72c8390`) holds only docs: `docs/phases/phase-5a/context.md` (full brief,
+  user decisions settled) + the plan split. No code yet.
 - Process lessons: `docs/process-learnings.md`.
 
 ## Next step
 
-1. **Run phase 5a** from `docs/phases/phase-5a/context.md` (branch
-   `phase-5a-trusted-fetch`): dev → review ‖ QA → fix → verify → learnings → PR.
+1. **Run phase 5a**: `git switch phase-5a-trusted-fetch`, read
+   `docs/phases/phase-5a/context.md`, then the per-phase loop (`docs/plan.md`):
+   write `1-dev.md` brief → dev → review ‖ QA → fix → verify → learnings → PR.
    Dev's real run uses YTKEY (~35 units) and ≤ ~$1 of Anthropic credit.
 2. Then 5b (player on `stages/trusted/`, Flask → FastAPI), then 5c (video
    spot-checks).
