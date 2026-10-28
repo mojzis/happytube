@@ -30,3 +30,23 @@ Orchestrator (user request): enabled GitHub Pages via `gh api -X POST repos/mojz
   LEGACY_FETCHED_DIR kept (videos.py); no-store caching; empty message text.
 - unresolved: push deploys fail until first stages/trusted commit on main;
   daily_run pushes current branch; plan.md runpy backlog item now fixed.
+
+## 2 — review (verdict: ship)
+- R1 low: deploy `paths:` misses channels/**, trusted/**, models/**, pyproject/uv.lock.
+- R2 low: daily_run `status | tee` failure under set -e skips the push.
+- R3 low: `git add stages/trusted` fails if dir missing → misleading push error.
+- R4 low: live `/player/videos.json` returns `[]` silently on wrong stages dir.
+- R5 low: `HAPPYTUBE_STAGES_DIR` applies to player only, name suggests everywhere.
+- preexisting: legacy commented git block in daily_run.sh contradicts 0010.
+- Answers: all scenarios handled; no path shows non-approved channel; guard covers
+  mount; traversal 404; flask fully gone.
+
+## 2 — QA (verified)
+- 495 / 85%; seeded 31 cases: export == live, exactly 8 shown; routes, traversal,
+  guard, exit codes, daily_run commit scope, CI fresh clone exit 1 — all pass.
+- Q1 medium: failed push leaves commit local; next run with nothing new never pushes.
+- Q2 low (= R3), Q3 low (= R4), Q6 low (= R1).
+- Q4 low: HEAD /player/videos.json falls to the static mount (404 / stale file).
+- Q5 low: non-date stage dir skipped silently.
+- preexisting: logs/ not git-ignored; player.js loads list only after YT iframe API
+  (no error if YouTube unreachable); daily_run pushes current branch.
