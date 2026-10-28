@@ -214,3 +214,72 @@ combined verify, as planned.
   dev, or is that a QA check by default?
 - Should multi-commit fix steps run full `poe typecheck` per commit? (Squash-merge is
   out: the user keeps full history.)
+
+## Phase 3 (2026-10-28)
+
+Source: `docs/phases/phase-3/` (agent vetting, real Claude API, 4 agent steps +
+orchestrator probe and committed run). Loop run: dev → review ‖ QA (QA runtime-only)
+→ fix → combined verify → orchestrator real run, as planned.
+
+### Loop design
+- **Decide open design questions with the user up front, as one multiple-choice
+  question.** Four choices (input, output, re-vet, model) took one exchange. Dev had
+  nothing left to invent, and no finding was about shape.
+- **Exploratory dev run, committed run after verify (phase 2 lesson applied).** It
+  paid off. R1 changed how the Claude call works. Data from the old call would have
+  stayed in the append-only registry. The committed run used the verified code.
+- **A blocked dev real run moves real-API checking to the end.** Review, QA, fix and
+  verify all used fakes. The orchestrator's 1-channel probe after the user's key fix
+  was the first real call. It worked, but only one probe stood between fakes and a
+  committed run. Keep the probe step even when the dev run worked.
+- Confirms phases 1–2: combined verify as round 2 was enough (8/8 resolved, 3 low,
+  `ship`). One fix round, stop at `ship`, defer lows.
+
+### Briefs & context
+- **Routing each added question to one agent worked.** Review got the logic list
+  (rubric, append-only, SDK shape), QA got runtime (no key, mid-run 401, collisions).
+  Overlap dropped to zero: R1–R6 and Q1–Q4 are all distinct. Keep it.
+- **Settled SDK choices are hypotheses too.** context.md settled `parse` +
+  fallbacks. Review found that `parse` validates before it returns, so stop_reason
+  can't be checked first. The "flag it, don't silently switch" clause covered it.
+- **"Stop and report on credential failure" worked first time.** Dev stopped after
+  one 401, wrote nothing, printed no key. Phase 2's rule is now proven in both
+  directions.
+- Check command lines in context.md by running them. The example put a group option
+  after the subcommand.
+
+### Agent reports
+- **Review caught an SDK-shape issue that QA's fake could not.** A fake returns
+  whatever the test wants. Only reading the SDK (with the `claude-api` skill) showed
+  `parse` raises before stop_reason is visible. For external SDKs, ask review to
+  check behaviour against the SDK source, not just the fake.
+- Verify exercised the real SDK over an `httpx` MockTransport. That is the closest
+  offline check to the real API and worth asking for by name.
+- Ask for a run ledger on paid calls (tokens, cost per channel). It made variance
+  visible: the same channel scored 45/50 then 39/50.
+
+### Tooling gotchas
+- **Click group options go before the subcommand**:
+  `happytube channels --channels-dir X vet …`, not `vet … --channels-dir X`.
+- Credentials in `.env` are a recurring blocker (2 phases in a row). Only the user
+  fixes them. A 1-call probe before the batch makes the failure cheap.
+- Model scoring is not deterministic. A second run of the same input is a cheap
+  check of score stability.
+
+### Answers to earlier open questions
+- *Should dev commit real-run data at all?* (phase 2) No. Dev's run is exploratory on
+  a scratch copy; the orchestrator commits after verify. Phase 3 did this and the
+  committed data matched the final code.
+- *Who fixes a bad credential?* (phase 2) The user, still. It worked: dev stopped,
+  the user fixed it, the orchestrator probed.
+- *Should the orchestrator eyeball real-data output?* (phase 2) Yes. It is cheap and
+  it found the strict flags (army aircraft → war) and the run-to-run variance.
+- *Full `poe typecheck` per commit?* (phase 2) The briefs required it; no broken
+  intermediate commit this phase.
+
+### Open questions (new)
+- When dev's real run is blocked, should the loop pause for the user's fix, or carry
+  on with fakes and probe at the end (as here)?
+- Should model-scored output be run twice (or averaged) before it is committed?
+- Is QA's fake-client runtime check worth its cost when the main risk is the
+  external SDK shape, which only review and verify caught?
