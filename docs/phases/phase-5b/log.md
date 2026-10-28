@@ -50,3 +50,12 @@ Orchestrator (user request): enabled GitHub Pages via `gh api -X POST repos/mojz
 - Q5 low: non-date stage dir skipped silently.
 - preexisting: logs/ not git-ignored; player.js loads list only after YT iframe API
   (no error if YouTube unreachable); daily_run pushes current branch.
+
+## 3 — fix
+- commits: 4badca8 daily_run push every run, tolerate status failure / no dir;
+  1d62dc5 deploy paths; d2b9179 serve/route missing-dir warning, HEAD live;
+  b61fb54 non-date dir warning; 273f133 --stages-dir help (read side only).
+- tests: 498 passed, 85%, poe check green.
+- all must/also-fix done (Q1, R2, R3, R1, R4, Q4, R5, Q5, logs/ ignore, stale block).
+- deviations: compact names like `20261028` now warned + skipped (were read as
+  dates; closes 5a V2); route warning once per app instance.
