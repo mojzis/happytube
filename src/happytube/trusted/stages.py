@@ -4,6 +4,7 @@ One markdown file per video, ``<video_id>.md`` (YAML frontmatter + body), kept
 apart from the legacy ``stages/fetch|assess|enhance`` so the two never mix.
 """
 
+import logging
 import re
 from datetime import date
 from pathlib import Path
@@ -14,12 +15,23 @@ from happytube.stages.base import Stage
 
 StageName = Literal["fetch", "assess", "enhance"]
 SUFFIX = ".md"
+logger = logging.getLogger(__name__)
 # A YouTube video id; it becomes a file name, so nothing else is written.
 VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 
 
 def is_video_id(value: str) -> bool:
     return VIDEO_ID.fullmatch(value) is not None
+
+
+def _day_of(name: str) -> date | None:
+    """The date a ``YYYY-MM-DD`` directory name stands for, else None (also for
+    other forms ``date.fromisoformat`` would take, like ``20261028``)."""
+    try:
+        day = date.fromisoformat(name)
+    except ValueError:
+        return None
+    return day if day.isoformat() == name else None
 
 
 class TrustedStage(Stage):
@@ -42,20 +54,32 @@ class TrustedStage(Stage):
     def load(self, target_date: date) -> list[MarkdownFile]:
         return [MarkdownFile.load(p) for p in self.files(target_date)]
 
-    def load_until(self, target_date: date) -> list[tuple[date, MarkdownFile]]:
-        """Every file dated ``target_date`` or earlier, with its date, oldest
-        date first (directories not named ``YYYY-MM-DD`` are ignored)."""
+    def days(self) -> list[date]:
+        """Dates that have a directory, oldest first. A directory not named
+        ``YYYY-MM-DD`` is skipped with a warning naming it; plain files are
+        ignored."""
         if not self.stage_path.is_dir():
             return []
         days = []
         for directory in self.stage_path.iterdir():
-            try:
-                day = date.fromisoformat(directory.name)
-            except ValueError:
+            if not directory.is_dir():
                 continue
-            if directory.is_dir() and day <= target_date:
-                days.append(day)
-        return [(day, md) for day in sorted(days) for md in self.load(day)]
+            day = _day_of(directory.name)
+            if day is None:
+                logger.warning("Skipping %s: not a YYYY-MM-DD directory", directory)
+                continue
+            days.append(day)
+        return sorted(days)
+
+    def load_until(self, target_date: date) -> list[tuple[date, MarkdownFile]]:
+        """Every file dated ``target_date`` or earlier, with its date, oldest
+        date first."""
+        return [
+            (day, md)
+            for day in self.days()
+            if day <= target_date
+            for md in self.load(day)
+        ]
 
     def remove(self, video_id: str) -> list[Path]:
         """Delete this video's files on every date; the paths removed."""

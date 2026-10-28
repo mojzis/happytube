@@ -11,7 +11,6 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "pandas>=2.2.3",
     "anthropic>=1.17.0,<2",
-    "flask>=3.1.2",
     "pydantic>=2.12",
     "pydantic-settings>=2.12.0",
     "jinja2>=3.1.4",
@@ -87,14 +86,13 @@ show_missing = true
 
 [tool.vulture]
 paths = ["src"]
-# Framework-registered code vulture cannot see being used: click commands, Flask
-# and FastAPI routes, middleware and exception handlers, and pydantic
+# Framework-registered code vulture cannot see being used: click commands,
+# FastAPI routes, middleware and exception handlers, and pydantic
 # validators/serializers are called through their decorators.
 ignore_decorators = [
     "@cli.command",
     "@channels.command",
     "@click.command",
-    "@app.route",
     "@app.get",
     "@app.post",
     "@app.middleware",

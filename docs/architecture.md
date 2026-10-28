@@ -4,8 +4,10 @@
 
 A Python CLI (`happytube`, click) runs a stage-based pipeline. Each stage reads the
 previous stage's markdown files and writes its own, so stages can be rerun per date.
-A Flask app serves a player for the curated videos; a static export of it deploys to
-GitHub Pages. A git-tracked channel registry holds candidate channels and their human
+The player shows the trusted pipeline's suitable, cleaned-up videos of currently
+approved channels (decision 0010): served live by the local FastAPI app at
+`/player/`, and as a static export built in CI from the committed
+`stages/trusted/` and deployed to GitHub Pages. A git-tracked channel registry holds candidate channels and their human
 and agent reviews; a local FastAPI + htmx review app (`happytube serve`) lets a human
 decide on them. The trusted pipeline (`happytube trusted`, decision 0009) fetches
 new videos only from human-approved channels, scores them with the shared rubric
@@ -31,7 +33,11 @@ Current (`src/happytube/`):
   call per channel batch, `id_mismatch` check, `is_suitable` in code. `enhance.py`:
   one call per suitable video. `runs.py`: `ItemRun` / `run_items`, the shared run
   loop (stopping error, dry run, client made only when there is work) behind the
-  `TrustedClient` protocol.
+  `TrustedClient` protocol. `player.py`: the player's selection rule
+  (`select_videos`, pure: suitable + enhanced + channel approved now, fields from
+  assess, newest first), the forgiving file reader (`read_stage`, bad files skipped
+  with a warning) and `player_videos`, shared by `/player/videos.json` and the
+  export (decision 0010).
 - `channels/` — channel registry: `Channel`, `Review` and `Evidence` models and
   `ChannelStore` (files under `channels/`). Status is derived from the latest human
   approve/reject; agent reviews never change it; a rejected channel is the blocklist
@@ -49,7 +55,9 @@ Current (`src/happytube/`):
   record as `channels review`. Jinja templates (autoescaped) with htmx partials
   (queue table; reviews section + out-of-band status badge), plain GET/POST
   fallbacks. A middleware refuses non-loopback `Host` headers (DNS rebinding) and
-  cross-site POSTs by `Origin` / `Sec-Fetch-Site` (CSRF). htmx is vendored.
+  cross-site POSTs by `Origin` / `Sec-Fetch-Site` (CSRF). htmx is vendored. The
+  same app serves the player: `/player/` (static page from `web/static/`) and
+  `/player/videos.json` (live selection from `--stages-dir`).
 - `rubric.py` — the calm/happy rubric (`RUBRIC_VERSION`), video flags, `VideoScore`,
   `is_suitable` and `id_mismatch`, shared by channel vetting and trusted assess.
 - `youtube.py` — small YouTube Data API client (handle resolve, channels,
@@ -60,14 +68,10 @@ Current (`src/happytube/`):
   `report` (HTML report + parquet exports).
 - `models/` — `MarkdownFile` (YAML frontmatter + body), `Video` (pydantic).
 - `config/` — pydantic settings from `.env`; YAML config from `config/base/`.
-- `web/` — Flask player (`server.py`) and static export (`export.py`).
+- `web/` — the player page (`static/`) and `export.py` (`videos.json` for Pages;
+  exits ≠ 0 when `stages/trusted/` or the registry is missing).
 - `videos.py`, `prompts.py`, `utils/` — legacy YouTube search for fetch, prompt
   texts, helpers.
-
-Planned:
-
-- **Player on FastAPI** — the Flask player moves to the FastAPI stack in phase 5
-  (decision 0006).
 
 ## Data
 
@@ -76,10 +80,12 @@ Planned:
 - `stages/trusted/{fetch,assess,enhance}/YYYY-MM-DD/<id>.md` — trusted pipeline:
   fetch frontmatter (channel, published, duration, `shorts_source`), assess adds
   calm/happy/flags/note/`suitable`/model/`rubric_version`, enhance adds
-  `enhanced_description` (suitable videos only).
+  `enhanced_description` (suitable videos only). Tracked in git: it is the
+  player's deployed data (0010); other `stages/` dirs are git-ignored.
 - `stages/report/YYYY-MM-DD.html`, `parquet/<stage>/by-run-date/*.parquet`.
 - `config/base/*.yaml` — app, prompts, YouTube search settings.
-- `data/fetched/` (git-ignored) — legacy raw API JSON the web player still reads.
+- `data/fetched/` (git-ignored) — legacy raw search JSON (`videos.py` still writes
+  it; nothing reads it).
 - `channels/<slug>/channel.yaml` and `channels/<slug>/reviews/<UTC stamp>-<reviewer>.yaml`
   — registry and append-only review records in git (decisions 0002, 0003).
 - `channels/<slug>/evidence/<UTC stamp>.yaml` — append-only evidence snapshots:
@@ -100,8 +106,10 @@ Planned:
   still pending up to the date, so a failed day's videos are picked up the next
   day. A per-channel / per-batch failure exits ≠ 0 after the chain finishes; a
   quota or key stop ends the chain; rerun is idempotent.
-- **Player:** `python -m happytube.web.server` locally, or
-  `python -m happytube.web.export` → GitHub Pages.
+- **Player:** `happytube serve` → `/player/` (live), or a push of
+  `stages/trusted/` / `channels/` to `main` → CI `python -m happytube.web.export`
+  → GitHub Pages. With `HAPPYTUBE_PUSH=1` the trusted daily run commits and pushes
+  `stages/trusted/` itself.
 - **Evidence:** `channels resolve` (handle → channel id, once) → `channels evidence`
   (stats + latest 50 uploads + `UUSH` Shorts ids, ~3 API units per channel) →
   snapshot in git.
@@ -114,5 +122,4 @@ Planned:
 - **Channel to video:** add candidate channel → collect evidence → agent vets →
   human approves in the web UI or CLI → `trusted fetch` reads only approved
   channels → the agent gates each video (decision 0008).
-- **Planned:** the player reads `stages/trusted/` (phase 5b); video spot-checks
-  (5c).
+- **Planned:** video spot-checks (5c).

@@ -429,3 +429,32 @@ combined verify → orchestrator probe → learnings, as planned. Real paid APIs
 - Should the orchestrator probe after verify be a named step in the loop?
 - Should model scores be checked for drift across runs (same video, re-scored)
   before 5b shows them?
+
+## Phase 5b (2026-10-28)
+
+Source: `docs/phases/phase-5b/` (trusted player, 5 agent steps after dev + 1
+orchestrator probe). Loop: dev → review ‖ QA → fix → combined verify → probe.
+
+### Loop design
+- Failure scenarios listed in context.md (5a open question → yes): dev handled
+  all, review found no selection logic gap; findings moved to shell glue and
+  deploy wiring.
+- QA running the shell script against a bare remote with a stubbed `uv` found the
+  only medium (failed push never retried). Give scripts a runtime QA item.
+- One fix round + combined verify held again (0–5b).
+- Probe on dev's existing real scratch data: final code, no paid calls.
+
+### Briefs & context
+- Open choices as one question call (3 questions, recommended option first) + a
+  "settled by the orchestrator, dev may argue" list: one round trip with the user.
+- Safety defaults (hide a later-rejected channel's videos) can be settled by the
+  orchestrator and stated, not asked.
+- One-time external steps the user asks for (Pages enable via `gh`): do them,
+  message the running dev, log it.
+
+### Tooling gotchas
+- `pkill -f` from the Bash tool can match its own shell (exit 144); use pgrep/pid.
+
+### Open questions (new)
+- Default runtime QA item for any phase that touches `scripts/`?
+

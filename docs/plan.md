@@ -30,8 +30,8 @@ Then the existing pipeline fetches only from approved channels.
 | 2 ✅ | Channel evidence | Resolve handles → channel ids (`channels.list`), collect stats + recent uploads (RSS and/or `playlistItems`), video durations; cached per channel. Research note + decision record comparing fetch methods with quota math for 50/200/500 channels. |
 | 3 ✅ | Agent vetting | Claude vets a channel from its evidence with the calm/happy rubric → markdown vet report + an agent review record. Video-level assessment reuses the same rubric. CLI: `channels vet <id>`. |
 | 4 ✅ | Web review UI | FastAPI + htmx app (decision 0006): Jinja2 pages over `ChannelStore` — channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records. Local only, `happytube serve` (decision 0007). |
-| 5a | Trusted fetch | `happytube trusted fetch/assess/enhance/run/status`: new long-form videos only from approved channels (playlistItems + UUSH, decision 0004), scored with the shared rubric by Claude Opus 5.5, enhance only `suitable`; `stages/trusted/`; side by side with the legacy pipeline; fails loudly (legacy fetch catch-all fixed too). Context: `docs/phases/phase-5a/context.md`. |
-| 5b | Trusted player | Player and static export read `stages/trusted/` instead of legacy `data/fetched/`; the player moves from Flask to the FastAPI app and `flask` is dropped. |
+| 5a ✅ | Trusted fetch | `happytube trusted fetch/assess/enhance/run/status`: new long-form videos only from approved channels (playlistItems + UUSH, decision 0004), scored with the shared rubric by Claude Opus 5.5, enhance only `suitable`; `stages/trusted/`; side by side with the legacy pipeline; fails loudly (legacy fetch catch-all fixed too). Context: `docs/phases/phase-5a/context.md`. |
+| 5b ✅ | Trusted player | Player and static export read `stages/trusted/` instead of legacy `data/fetched/`; the player moves from Flask to the FastAPI app and `flask` is dropped. Shown = suitable + enhanced + channel approved now; committed `stages/trusted/` feeds GitHub Pages (decision 0010). Context: `docs/phases/phase-5b/context.md`. |
 | 5c | Video spot-checks | Video review queue + video review records in the review UI (decision 0008: they measure the agent, they don't gate). Record format/location settled in 5c. |
 
 Later (not scheduled): discovery from directories (EAZA/AZA, park services, museums),
@@ -61,7 +61,6 @@ branch; merge only after the user says so.
 ## Backlog (from phase 0, not scheduled)
 
 - `report` requires API keys although it calls no API.
-- runpy RuntimeWarning on `python -m happytube.web.*` (web/__init__ imports server).
 - 8 real dead-code hits (`uv run poe dead-code`): delete or use.
 - Test nits: quota error fixture shape (`error.errors[0].reason`), `test_today_local`
   still pins the implementation, duplicated CLI test setup.
@@ -124,12 +123,8 @@ branch; merge only after the user says so.
 
 ## Backlog (from phase 5a, not scheduled)
 
-- 5b must read calm/happy/suitable from assess and only `enhanced_description` from
-  enhance (a video re-scored suitable keeps an enhance file with stale scores).
 - V1: `trusted run` missing-key message suggests `--dry-run` (run has none); run
   needs the key even when nothing is pending.
-- V2: `load_until` accepts date dirs like `20261028` / `2026-W44-3`; require
-  `day.isoformat() == name`.
 - V3: every run parses all past stage files; select by stem, load only the todo list.
 - V4: `run` abort message duplicates `_failure`, omits earlier failed steps.
 - V5: table test for `pending` (same id on two dates, force, earlier skipped).
@@ -137,3 +132,11 @@ branch; merge only after the user says so.
 - A failed / refused assess batch is re-paid on every rerun (no retry cap).
 - Fetch window compares UTC published date with local `--date`.
 
+## Backlog (from phase 5b, not scheduled)
+
+- player.js lists videos only after the YouTube iframe API loads; YouTube
+  unreachable → empty list, no error.
+- `daily_run.sh` pushes whatever branch is checked out; no upstream → exit 1.
+- Grandma-facing player UI (bigger, simpler, no search) — not started.
+- `HAPPYTUBE_STAGES_DIR` is read-side only; the `trusted` commands write `stages/`
+  in the cwd (ties into the `data_root` item).

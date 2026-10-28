@@ -12,7 +12,9 @@ from fastapi.testclient import TestClient
 from happytube.channels.store import ChannelStore
 from happytube.cli.commands import cli
 from happytube.paths import PROJECT_ROOT
+from tests.player_helpers import PLAYER_JSON, write_shown
 from tests.review_helpers import QUEUE, detail_url, seed_vetted
+from tests.trusted_helpers import add_channel
 
 LOCAL_8765 = "http://127.0.0.1:8765"
 LOCALHOST = "http://localhost"
@@ -24,6 +26,7 @@ def run_calls(monkeypatch):
     calls = []
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: calls.append((app, kw)))
     monkeypatch.delenv("HAPPYTUBE_CHANNELS_DIR", raising=False)
+    monkeypatch.delenv("HAPPYTUBE_STAGES_DIR", raising=False)
     monkeypatch.delenv("HAPPYTUBE_REVIEWER", raising=False)
     monkeypatch.delenv("YTKEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -31,19 +34,23 @@ def run_calls(monkeypatch):
 
 
 @pytest.fixture
-def served(run_calls, monkeypatch):
+def served(run_calls, monkeypatch, tmp_path):
     """As ``run_calls``, with the port check passing: tests don't depend on port
-    8000 being free or on this machine having the address."""
+    8000 being free or on this machine having the address. The cwd is a temp dir
+    with an (empty) ``stages/trusted/``, so the default stages dir exists."""
     monkeypatch.setattr("happytube.cli.serve._check_port_free", lambda host, port: None)
+    (tmp_path / "stages" / "trusted").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
     return run_calls
 
 
 def test_serve_help():
     result = CliRunner().invoke(cli, ["serve", "--help"])
     assert result.exit_code == 0
-    for option in ["--host", "--port", "--channels-dir", "--reviewer"]:
+    for option in ["--host", "--port", "--channels-dir", "--stages-dir", "--reviewer"]:
         assert option in result.output
     assert "HAPPYTUBE_CHANNELS_DIR" in result.output
+    assert "HAPPYTUBE_STAGES_DIR" in result.output
     assert "HAPPYTUBE_REVIEWER" in result.output
 
 
@@ -92,6 +99,35 @@ def test_serve_env_vars(served, tmp_path, monkeypatch):
     [(app, _)] = served
     html = TestClient(app, base_url=LOCALHOST).get(detail_url("zoo-praha")).text
     assert 'name="reviewer" value="babička-helper"' in html
+
+
+def test_serve_prints_player_url_and_stages_dir(served):
+    result = CliRunner().invoke(cli, ["serve"])
+    assert result.exit_code == 0, result.output
+    assert "http://127.0.0.1:8000/player/" in result.output
+    assert "Stages: stages" in result.output
+
+
+def test_serve_stages_dir_reaches_the_player(served, tmp_path, monkeypatch):
+    registry = tmp_path / "channels"
+    add_channel(ChannelStore(registry), "zoo", "UCzoo")
+    write_shown(tmp_path / "st", "zoo")
+    monkeypatch.setenv("HAPPYTUBE_STAGES_DIR", str(tmp_path / "st"))
+
+    result = CliRunner().invoke(cli, ["serve", "--channels-dir", str(registry)])
+
+    assert result.exit_code == 0, result.output
+    [(app, _)] = served
+    videos = TestClient(app, base_url=LOCALHOST).get(PLAYER_JSON).json()
+    assert [v["channel_slug"] for v in videos] == ["zoo"]
+
+
+def test_serve_warns_when_the_trusted_stages_are_missing(served, tmp_path):
+    result = CliRunner().invoke(cli, ["serve", "--stages-dir", str(tmp_path / "x")])
+
+    assert result.exit_code == 0, result.output
+    assert f"Warning: {tmp_path / 'x' / 'trusted'} does not exist" in result.stderr
+    assert len(served) == 1
 
 
 @pytest.mark.parametrize("host", ["192.168.1.5", "fe80::1", "[fe80::1]"])

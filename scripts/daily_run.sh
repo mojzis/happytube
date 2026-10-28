@@ -8,6 +8,9 @@ HAPPYTUBE_DIR="${HAPPYTUBE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # Which pipeline to run: "legacy" (YouTube search + happiness, the default) or
 # "trusted" (approved channels + rubric, decision 0009).
 PIPELINE="${HAPPYTUBE_PIPELINE:-legacy}"
+# Trusted only: HAPPYTUBE_PUSH=1 commits and pushes stages/trusted/ after the run
+# (the Pages workflow deploys the player from it, decision 0010). Off by default.
+PUSH="${HAPPYTUBE_PUSH:-0}"
 LOG_DIR="$HAPPYTUBE_DIR/logs"
 DATE=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
@@ -41,15 +44,45 @@ elif [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
+# Commit what the trusted run wrote under stages/trusted/ (only there, never
+# `git add -A`; nothing changed → no commit), then push. The push runs every time,
+# so a commit left local by an earlier failed push goes out on the next run.
+# No stages/trusted/ (nothing fetched yet) → nothing to do. Non-zero on failure.
+push_trusted_stages() {
+    if [ ! -d stages/trusted ]; then
+        log "No stages/trusted directory; nothing to commit or push"
+        return 0
+    fi
+    git add -- stages/trusted || return 1
+    if git diff --cached --quiet -- stages/trusted; then
+        log "No new trusted stage files; nothing to commit"
+    else
+        git commit -m "trusted run $DATE" -- stages/trusted 2>&1 | tee -a "$LOG_FILE" \
+            || return 1
+    fi
+    git push 2>&1 | tee -a "$LOG_FILE" || return 1
+    log "Pushed stages/trusted for $DATE"
+}
+
 if [ "$PIPELINE" = "trusted" ]; then
     log "Running the trusted pipeline (fetch, assess, enhance)..."
-    if uv run happytube trusted run --date "$DATE" 2>&1 | tee -a "$LOG_FILE"; then
-        uv run happytube trusted status --date "$DATE" 2>&1 | tee -a "$LOG_FILE"
+    STATUS=0
+    uv run happytube trusted run --date "$DATE" 2>&1 | tee -a "$LOG_FILE" || STATUS=1
+    if [ "$STATUS" -eq 0 ]; then
         log "Trusted pipeline completed successfully"
-        exit 0
+        # Informational only: a failure here must not skip the push below.
+        uv run happytube trusted status --date "$DATE" 2>&1 | tee -a "$LOG_FILE" \
+            || log "WARNING: trusted status failed (the run itself succeeded)"
+    else
+        log "ERROR: Trusted pipeline failed! See $LOG_FILE (rerunning is safe)"
     fi
-    log "ERROR: Trusted pipeline failed! See $LOG_FILE (rerunning is safe)"
-    exit 1
+    # A failed run may still have written files (other channels, batches):
+    # those are pushed too.
+    if [ "$PUSH" = "1" ] && ! push_trusted_stages; then
+        log "ERROR: committing or pushing stages/trusted failed"
+        STATUS=1
+    fi
+    exit "$STATUS"
 elif [ "$PIPELINE" != "legacy" ]; then
     log "ERROR: unknown HAPPYTUBE_PIPELINE '$PIPELINE' (use legacy or trusted)"
     exit 2
@@ -79,16 +112,6 @@ if uv run happytube run-all \
         # SUBJECT="HappyTube Report - $DATE"
         # BODY="HappyTube report for $DATE is ready. See attached log."
         # echo "$BODY" | mail -s "$SUBJECT" -a "$LOG_FILE" user@example.com
-
-        # Optional: Deploy to web player
-        # Uncomment to automatically export and deploy to GitHub Pages
-        # log "Exporting to web player..."
-        # uv run python -m happytube.web.export 2>&1 | tee -a "$LOG_FILE"
-        # if [ -d "src/happytube/web/static" ]; then
-        #     log "Web export completed"
-        #     # You can add git commands here to commit and push
-        #     # cd src/happytube/web/static && git add . && git commit -m "Update $DATE" && git push
-        # fi
 
         log "========================================="
         log "Pipeline completed successfully"
