@@ -12,7 +12,11 @@ import requests
 
 from happytube.paths import LEGACY_FETCHED_DIR
 from happytube.utils import determine_text_script
-from happytube.youtube import REQUEST_TIMEOUT_S, YouTubeAPIError, api_error_detail
+from happytube.youtube import (
+    REQUEST_TIMEOUT_S,
+    YouTubeAPIError,
+    api_error_detail,
+)
 
 
 @dataclass
@@ -31,7 +35,16 @@ class YtQuery:
 
     def get(self):
         """Run the request and store its ``items``; raise on any non-200 reply."""
-        response = requests.get(self.url, params=self.params, timeout=REQUEST_TIMEOUT_S)
+        try:
+            response = requests.get(
+                self.url, params=self.params, timeout=REQUEST_TIMEOUT_S
+            )
+        except requests.RequestException as e:
+            # ``from None``: the original exception's text includes the URL + key.
+            # Status 0 = no response; fetch stages fail on YouTubeAPIError.
+            raise YouTubeAPIError(
+                self.name, 0, "no response", type(e).__name__
+            ) from None
         if response.status_code != HTTPStatus.OK:
             raise YouTubeAPIError(
                 self.name,

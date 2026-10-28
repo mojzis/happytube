@@ -1,6 +1,6 @@
 """Application settings loaded from environment variables."""
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +73,6 @@ class YouTubeSettings(BaseSettings):
         extra="ignore",
     )
 
-    youtube_api_key: str = Field(
+    youtube_api_key: SecretStr = Field(
         ..., alias="YTKEY", min_length=1, description="YouTube Data API key"
     )

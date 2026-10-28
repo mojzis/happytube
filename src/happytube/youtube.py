@@ -98,7 +98,20 @@ _STOPPING_REASONS: dict[str, type[YouTubeAPIError]] = {
     "API_KEY_INVALID": InvalidKeyError,
     "API_KEY_SERVICE_BLOCKED": InvalidKeyError,
     "SERVICE_DISABLED": InvalidKeyError,
+    # Older ``errors[0].reason`` spellings of the same two failures.
+    "keyInvalid": InvalidKeyError,
+    "accessNotConfigured": InvalidKeyError,
 }
+
+
+def is_playlist_not_found(error: YouTubeError) -> bool:
+    """``True`` for a 404 ``playlistNotFound`` — for ``UU…`` / ``UUSH…`` playlists
+    YouTube's way of saying the channel has no such uploads."""
+    return (
+        isinstance(error, YouTubeAPIError)
+        and error.status_code == HTTPStatus.NOT_FOUND
+        and error.error_reason == "playlistNotFound"
+    )
 
 
 def parse_duration(value: str) -> int:

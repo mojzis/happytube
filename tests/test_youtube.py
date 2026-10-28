@@ -13,6 +13,7 @@ from happytube.youtube import (
     YouTubeAPIError,
     YouTubeClient,
     YouTubeConnectionError,
+    is_playlist_not_found,
     parse_duration,
 )
 
@@ -189,7 +190,9 @@ def test_youtube_settings_needs_only_ytkey(tmp_path, monkeypatch):
     with pytest.raises(ValidationError):
         YouTubeSettings()
     (tmp_path / ".env").write_text("YTKEY=from-env-file\nOTHER=1\n")
-    assert YouTubeSettings().youtube_api_key == "from-env-file"
+    settings = YouTubeSettings()
+    assert settings.youtube_api_key.get_secret_value() == "from-env-file"
+    assert "from-env-file" not in repr(settings)
 
 
 def test_invalid_key_is_run_stopping():
@@ -204,3 +207,27 @@ def test_invalid_key_is_run_stopping():
     with pytest.raises(InvalidKeyError, match="API key not valid") as exc:
         YouTubeClient(KEY, get=get).resolve_handle("@x")
     assert isinstance(exc.value, RunStoppingError)
+
+
+@pytest.mark.parametrize("reason", ["keyInvalid", "accessNotConfigured"])
+def test_legacy_key_reasons_are_run_stopping(reason):
+    body = {"error": {"message": "nope", "errors": [{"reason": reason}]}}
+    get = FakeGet(_response(403, body, reason="Forbidden"))
+    with pytest.raises(InvalidKeyError):
+        YouTubeClient(KEY, get=get).resolve_handle("@x")
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "expected"),
+    [
+        (404, "playlistNotFound", True),
+        (404, "", False),
+        (403, "playlistNotFound", False),
+    ],
+)
+def test_is_playlist_not_found(status, reason, expected):
+    body = {"error": {"message": "m", "errors": [{"reason": reason}]}}
+    get = FakeGet(_response(status, body, reason="x"))
+    with pytest.raises(YouTubeAPIError) as exc:
+        YouTubeClient(KEY, get=get).playlist_items("UUSHabc")
+    assert is_playlist_not_found(exc.value) is expected
