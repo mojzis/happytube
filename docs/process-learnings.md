@@ -283,3 +283,85 @@ orchestrator probe and committed run). Loop run: dev → review ‖ QA (QA runti
 - Should model-scored output be run twice (or averaged) before it is committed?
 - Is QA's fake-client runtime check worth its cost when the main risk is the
   external SDK shape, which only review and verify caught?
+
+## Phase 4 (2026-10-28)
+
+Source: `docs/phases/phase-4/` (local review UI, FastAPI + htmx, 4 agent steps + 1
+orchestrator CSS fix). Loop run: dev → review ‖ QA (QA runtime + real browser) →
+fix → combined verify → learnings, as planned. No external API.
+
+### Loop design
+- **First phase with a real browser check by QA (Chrome tools).** Curl had covered
+  every route and status code. The browser added what curl can't see: htmx swaps,
+  `hx-push-url` and the back button, the OOB badge, the 422 form in place, cookie
+  prefill after reload, console errors, which hosts the page loads from, and layout
+  (Q4 columns). In verify it was the only proof that the R1 alert JS works; the fix
+  agent had no browser and listed that as unresolved. For any UI phase, put a
+  browser check in QA and in verify.
+- Review still found the most important UI bug (R1, silent htmx errors) by reading
+  the vendored htmx source and reproducing with TestClient. The browser confirmed
+  the fix. Review and browser QA complement each other; neither replaces the other.
+- Confirms phases 1–3: one fix round, combined verify as round 2 (all resolved, one
+  partial, `ship`), stop at `ship`, defer lows.
+- **Orchestrator self-fix rule in practice:** V2 was one CSS line, no logic, logged
+  in log.md, committed with the verify log. V1 (`--host 0`) needs code and a test,
+  so it went to the backlog. Same line as phase 1: cosmetic or doc → orchestrator;
+  code → backlog or a loop.
+
+### Briefs & context
+- **All four design decisions (reviewer identity, scope, local-only, location)
+  settled with the user in one multiple-choice question up front.** Second phase in
+  a row. Again no finding was about shape.
+- **Safety rules spelled out in context.md (Host, Origin / Sec-Fetch-Site,
+  autoescape, vendored JS) gave review a checklist.** Review and verify tested
+  bypasses (forged Origin, odd IPv4/IPv6 Host forms) instead of asking whether there should
+  be a check. For a local app that writes files, put the threat model in context.
+- A settled detail can still be wrong: "non-loopback `--host` is allowed" did not
+  cover wildcard binds, which a Host check makes useless. Dev flagged it as
+  unresolved; review made it R2. The "flag it, don't silently switch" clause covered
+  a design detail here, not only external facts.
+- Routing added questions to one agent (logic → review, runtime/browser → QA) held.
+  Only one duplicate (Q2 = R2), found independently.
+- Fix brief with must-fix / do-NOT-fix lists and a stated preference per option
+  (e.g. Q1: probe or friendly error, "say which") worked again.
+
+### Agent reports
+- Dev's `unresolved_issues` named exactly the two gaps that became findings
+  (wildcard host, no browser check). Turning dev's unresolved list into review/QA
+  checks keeps paying off.
+- Fix agent reported "htmx alert JS not tried in a real browser" as unresolved;
+  the verify brief then asked for that browser check by name. That chain worked.
+- QA screenshots stayed in the session scratchpad, not committed. Enough for the
+  orchestrator; the log records only what they showed.
+
+### Tooling gotchas
+- Chrome tools must be loaded via ToolSearch, and the `claude-in-chrome` skill read
+  first. Agents worked in a new tab only.
+- Background servers in agent steps: kill them and check the port is free; QA's
+  port-in-use check (Q1) came from that brief line.
+- `uv build` + install in a throwaway venv + run from another cwd is the cheap check
+  that package data (templates, static) ships. It also surfaced Q3 (default paths
+  resolve inside the venv).
+- deptry and vulture need entries for framework-loaded code (python-multipart,
+  starlette, FastAPI decorators). Ask review to judge each ignore: justified or
+  masking.
+
+### Answers to earlier open questions
+- *Is a dedicated QA agent worth it for a small, pure-logic phase?* (phase 1) This
+  phase was UI, not pure logic. For UI, yes: the browser check, wheel install and
+  concurrent CLI + web writes were all QA-only evidence. Pure-logic phases are still
+  open.
+- *When may the orchestrator fix trivially itself?* (phase 0) Evidence for the rule
+  so far: doc rewording (phase 1) and one CSS line (phase 4), after `ship`, logged.
+  Code with behaviour goes to the backlog.
+- *Should final verify always run?* (phase 0) Four phases, verify ran each time and
+  found 1–3 new lows each time (here V1, V2). Keep it.
+- Credential questions (phases 2–3): no evidence this phase; no API keys were
+  involved.
+
+### Open questions (new)
+- Should browser screenshots be kept (committed or attached to the PR), or is the
+  log's description enough?
+- Should the browser check move into dev's real run for UI phases, so fix agents
+  can also see their change?
+- Should vendored assets (htmx) get a check (hash vs header comment) in `poe check`?
