@@ -8,6 +8,9 @@ HAPPYTUBE_DIR="${HAPPYTUBE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # Which pipeline to run: "legacy" (YouTube search + happiness, the default) or
 # "trusted" (approved channels + rubric, decision 0009).
 PIPELINE="${HAPPYTUBE_PIPELINE:-legacy}"
+# Trusted only: HAPPYTUBE_PUSH=1 commits and pushes stages/trusted/ after the run
+# (the Pages workflow deploys the player from it, decision 0010). Off by default.
+PUSH="${HAPPYTUBE_PUSH:-0}"
 LOG_DIR="$HAPPYTUBE_DIR/logs"
 DATE=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
@@ -41,15 +44,37 @@ elif [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
+# Commit and push what the trusted run wrote under stages/trusted/ (only there,
+# never `git add -A`); nothing changed → no commit. Returns non-zero on failure.
+push_trusted_stages() {
+    git add -- stages/trusted || return 1
+    if git diff --cached --quiet -- stages/trusted; then
+        log "No new trusted stage files; nothing to commit"
+        return 0
+    fi
+    git commit -m "trusted run $DATE" -- stages/trusted 2>&1 | tee -a "$LOG_FILE" \
+        || return 1
+    git push 2>&1 | tee -a "$LOG_FILE" || return 1
+    log "Pushed stages/trusted for $DATE"
+}
+
 if [ "$PIPELINE" = "trusted" ]; then
     log "Running the trusted pipeline (fetch, assess, enhance)..."
-    if uv run happytube trusted run --date "$DATE" 2>&1 | tee -a "$LOG_FILE"; then
+    STATUS=0
+    uv run happytube trusted run --date "$DATE" 2>&1 | tee -a "$LOG_FILE" || STATUS=1
+    if [ "$STATUS" -eq 0 ]; then
         uv run happytube trusted status --date "$DATE" 2>&1 | tee -a "$LOG_FILE"
         log "Trusted pipeline completed successfully"
-        exit 0
+    else
+        log "ERROR: Trusted pipeline failed! See $LOG_FILE (rerunning is safe)"
     fi
-    log "ERROR: Trusted pipeline failed! See $LOG_FILE (rerunning is safe)"
-    exit 1
+    # A failed run may still have written files (other channels, batches):
+    # those are pushed too.
+    if [ "$PUSH" = "1" ] && ! push_trusted_stages; then
+        log "ERROR: committing or pushing stages/trusted failed"
+        STATUS=1
+    fi
+    exit "$STATUS"
 elif [ "$PIPELINE" != "legacy" ]; then
     log "ERROR: unknown HAPPYTUBE_PIPELINE '$PIPELINE' (use legacy or trusted)"
     exit 2

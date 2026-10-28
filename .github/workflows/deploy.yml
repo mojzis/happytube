@@ -1,9 +1,18 @@
 name: Deploy HappyTube to GitHub Pages
 
-# Auto-deploy on push is paused: the export reads legacy data/fetched/ and yields
-# 0 videos. Re-add `push: branches: [main]` once the player reads stages/.
+# The player's data is the committed stages/trusted/ + channels/ (decision 0010):
+# videos.json is built here, never committed. A push to main touching them (or the
+# player) redeploys; the export fails the build if stages/trusted/ is missing.
 on:
-  workflow_dispatch:  # manual trigger only
+  push:
+    branches: [main]
+    paths:
+      - "stages/trusted/**"
+      - "channels/**"
+      - "src/happytube/web/**"
+      - "src/happytube/trusted/player.py"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -35,6 +44,7 @@ jobs:
         run: uv sync
 
       - name: Export videos to static JSON
+        # From the repo root: reads stages/trusted/ and channels/
         run: uv run python -m happytube.web.export
 
       - name: Setup Pages
