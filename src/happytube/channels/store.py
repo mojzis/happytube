@@ -4,23 +4,35 @@ Layout (decision 0003)::
 
     <root>/<slug>/channel.yaml
     <root>/<slug>/reviews/<YYYYMMDDTHHMMSSZ>-<reviewer slug>[-N].yaml
+    <root>/<slug>/evidence/<YYYYMMDDTHHMMSSZ>[-N].yaml          (decision 0004)
 
 Files are the source of truth; nothing is cached. Every write creates a new file
-exclusively, so concurrent writers never overwrite each other.
+exclusively, so concurrent writers never overwrite each other — except
+``set_channel_id``, which fills a null ``channel_id`` in ``channel.yaml`` once.
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from happytube.channels.models import SLUG_PATTERN, Channel, Review, Status, slugify
+from happytube.channels.models import (
+    SLUG_PATTERN,
+    Channel,
+    Evidence,
+    Review,
+    Status,
+    slugify,
+)
 
 CHANNEL_FILE = "channel.yaml"
 REVIEWS_DIR = "reviews"
+EVIDENCE_DIR = "evidence"
 DECISIVE_VERDICTS: dict[str, Status] = {"approve": "approved", "reject": "rejected"}
 _COLLISION_SUFFIX = re.compile(r"^(?P<base>.+)-(?P<n>\d+)$")
 
@@ -35,6 +47,10 @@ class ChannelExistsError(ChannelStoreError):
 
 class ChannelNotFoundError(ChannelStoreError):
     """No channel with the given slug."""
+
+
+class ChannelIdMismatchError(ChannelStoreError):
+    """``channel.yaml`` already holds a different channel id; never overwritten."""
 
 
 def derive_status(reviews: list[Review]) -> Status:
@@ -53,7 +69,7 @@ def derive_status(reviews: list[Review]) -> Status:
 
 
 def _collision_index(name: str, names: set[str]) -> int:
-    """Write order of a review file among same-stem files: base is 1, ``-N`` is N.
+    """Write order of a record file among same-stem files: base is 1, ``-N`` is N.
 
     A trailing ``-N`` only counts as a collision suffix when the base file exists,
     so a reviewer slug that ends in digits (``bot-2``) is not mistaken for one.
@@ -66,10 +82,12 @@ def _collision_index(name: str, names: set[str]) -> int:
 
 @dataclass
 class ChannelEntry:
-    """A channel with its reviews (chronological) and derived status."""
+    """A channel with its reviews (chronological), derived status and the latest
+    evidence snapshot (``None`` if it has none)."""
 
     channel: Channel
     reviews: list[Review]
+    latest_evidence: Evidence | None = None
 
     @property
     def status(self) -> Status:
@@ -88,13 +106,26 @@ class ChannelEntry:
             "review_count": len(self.reviews),
             "human_review_count": human,
             "agent_review_count": len(self.reviews) - human,
+            "evidence_at": (
+                self.latest_evidence.model_dump(mode="json")["fetched_at"]
+                if self.latest_evidence
+                else None
+            ),
         }
 
     def detail_dict(self) -> dict[str, Any]:
-        """``summary_dict`` plus every review, oldest first."""
+        """``summary_dict`` plus every review (oldest first) and the latest
+        evidence snapshot in full, with its shorts count."""
+        evidence = None
+        if self.latest_evidence:
+            evidence = {
+                **self.latest_evidence.model_dump(mode="json"),
+                "shorts_count": self.latest_evidence.shorts_count,
+            }
         return {
             **self.summary_dict(),
             "reviews": [r.model_dump(mode="json") for r in self.reviews],
+            "evidence": evidence,
         }
 
 
@@ -125,6 +156,45 @@ def _load_model[M: BaseModel](path: Path, model: type[M]) -> M:
         )
         msg = f"{path}: {problems}"
         raise ChannelStoreError(msg) from e
+
+
+def _load_records[M: BaseModel](
+    directory: Path, model: type[M], timestamp: Callable[[M], datetime]
+) -> list[M]:
+    """Every record file in ``directory`` in write order: by ``timestamp``, then by
+    the filename's collision suffix (base file first, then ``-2``, ``-3`` …)."""
+    if not directory.is_dir():
+        return []
+    paths = list(directory.glob("*.yaml"))
+    names = {p.name for p in paths}
+    loaded = [(_load_model(p, model), p.name) for p in paths]
+    loaded.sort(
+        key=lambda pair: (
+            timestamp(pair[0]),
+            _collision_index(pair[1], names),
+            pair[1],
+        )
+    )
+    return [record for record, _ in loaded]
+
+
+def _write_new(directory: Path, stem: str, content: str) -> Path:
+    """Create ``<stem>.yaml`` exclusively, or ``<stem>-2.yaml``, ``-3`` … if taken."""
+    directory.mkdir(exist_ok=True)
+    suffix = 1
+    while True:
+        name = f"{stem}.yaml" if suffix == 1 else f"{stem}-{suffix}.yaml"
+        try:
+            with (directory / name).open("x", encoding="utf-8") as f:
+                f.write(content)
+        except FileExistsError:
+            suffix += 1
+            continue
+        return directory / name
+
+
+def _stamp(value: datetime) -> str:
+    return value.strftime("%Y%m%dT%H%M%SZ")
 
 
 def filter_entries(
@@ -188,23 +258,25 @@ class ChannelStore:
     def reviews(self, slug: str) -> list[Review]:
         """Reviews of a channel in write order: by ``created_at``, then by the
         filename's collision suffix (base file first, then ``-2``, ``-3`` …)."""
-        reviews_dir = self._channel_dir(slug) / REVIEWS_DIR
-        if not reviews_dir.is_dir():
-            return []
-        paths = list(reviews_dir.glob("*.yaml"))
-        names = {p.name for p in paths}
-        loaded = [(_load_model(p, Review), p.name) for p in paths]
-        loaded.sort(
-            key=lambda pair: (
-                pair[0].created_at,
-                _collision_index(pair[1], names),
-                pair[1],
-            )
+        return _load_records(
+            self._channel_dir(slug) / REVIEWS_DIR, Review, lambda r: r.created_at
         )
-        return [review for review, _ in loaded]
+
+    def evidence(self, slug: str) -> list[Evidence]:
+        """Evidence snapshots of a channel in write order (by ``fetched_at``, same
+        tie rule as reviews); the last one is the latest."""
+        return _load_records(
+            self._channel_dir(slug) / EVIDENCE_DIR, Evidence, lambda e: e.fetched_at
+        )
+
+    def latest_evidence(self, slug: str) -> Evidence | None:
+        snapshots = self.evidence(slug)
+        return snapshots[-1] if snapshots else None
 
     def get(self, slug: str) -> ChannelEntry:
-        return ChannelEntry(self.get_channel(slug), self.reviews(slug))
+        return ChannelEntry(
+            self.get_channel(slug), self.reviews(slug), self.latest_evidence(slug)
+        )
 
     def entries(self) -> list[ChannelEntry]:
         """Every channel. A broken file raises ``ChannelStoreError`` naming it:
@@ -248,18 +320,40 @@ class ChannelStore:
     def add_review(self, slug: str, review: Review) -> Path:
         """Write a new review file for ``slug``; never overwrites. Returns its path."""
         self.get_channel(slug)  # raises ChannelNotFoundError
-        reviews_dir = self._channel_dir(slug) / REVIEWS_DIR
-        reviews_dir.mkdir(exist_ok=True)
-        stamp = review.created_at.strftime("%Y%m%dT%H%M%SZ")
-        stem = f"{stamp}-{slugify(review.reviewer) or 'reviewer'}"
-        content = _dump_yaml(review.model_dump(mode="json"))
-        suffix = 1
-        while True:
-            name = f"{stem}.yaml" if suffix == 1 else f"{stem}-{suffix}.yaml"
-            try:
-                with (reviews_dir / name).open("x", encoding="utf-8") as f:
-                    f.write(content)
-            except FileExistsError:
-                suffix += 1
-                continue
-            return reviews_dir / name
+        stem = f"{_stamp(review.created_at)}-{slugify(review.reviewer) or 'reviewer'}"
+        return _write_new(
+            self._channel_dir(slug) / REVIEWS_DIR,
+            stem,
+            _dump_yaml(review.model_dump(mode="json")),
+        )
+
+    def add_evidence(self, slug: str, evidence: Evidence) -> Path:
+        """Write a new evidence snapshot for ``slug``; never overwrites."""
+        self.get_channel(slug)  # raises ChannelNotFoundError
+        return _write_new(
+            self._channel_dir(slug) / EVIDENCE_DIR,
+            _stamp(evidence.fetched_at),
+            _dump_yaml(evidence.model_dump(mode="json")),
+        )
+
+    def set_channel_id(self, slug: str, channel_id: str) -> bool:
+        """Fill a null ``channel_id`` in ``channel.yaml`` (the one machine write to
+        it, decision 0004). Returns ``True`` if written, ``False`` if it already
+        held ``channel_id``; a different id raises ``ChannelIdMismatchError``."""
+        channel = self.get_channel(slug)
+        if channel.channel_id == channel_id:
+            return False
+        if channel.channel_id is not None:
+            msg = (
+                f"{slug}: channel.yaml has channel_id '{channel.channel_id}' but "
+                f"the handle resolves to '{channel_id}'; not overwriting"
+            )
+            raise ChannelIdMismatchError(msg)
+        updated = Channel.model_validate(
+            {**channel.model_dump(mode="json"), "channel_id": channel_id}
+        )
+        path = self._channel_dir(slug) / CHANNEL_FILE
+        tmp = path.with_name(f".{CHANNEL_FILE}.tmp")
+        tmp.write_text(_dump_yaml(updated.model_dump(mode="json")), encoding="utf-8")
+        tmp.replace(path)
+        return True

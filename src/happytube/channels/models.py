@@ -105,3 +105,63 @@ def slugify(text: str) -> str:
         unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     )
     return re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
+
+
+EvidenceMethod = Literal["api", "rss"]
+
+
+class EvidenceVideo(BaseModel):
+    """One recent upload in an evidence snapshot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    video_id: str = Field(min_length=1)
+    title: str
+    published_at: datetime
+    duration_s: int | None = Field(default=None, ge=0)
+    is_short: bool
+    description: str = ""
+    default_language: str | None = None
+    made_for_kids: bool | None = None
+
+    @field_validator("published_at")
+    @classmethod
+    def _published_at_utc(cls, value: datetime) -> datetime:
+        return _as_utc(value)
+
+    @field_serializer("published_at")
+    def _dump_published_at(self, value: datetime) -> str:
+        return _iso_z(value)
+
+
+class Evidence(BaseModel):
+    """A snapshot of a channel's stats and recent uploads (append-only file)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fetched_at: datetime = Field(default_factory=_now)
+    method: EvidenceMethod
+    channel_id: str = Field(pattern=CHANNEL_ID_PATTERN)
+    title: str
+    custom_url: str | None = None
+    description: str = ""
+    country: str | None = None
+    published_at: datetime | None = None
+    subscriber_count: int | None = Field(default=None, ge=0)
+    view_count: int | None = Field(default=None, ge=0)
+    video_count: int | None = Field(default=None, ge=0)
+    uploads_playlist_id: str | None = None
+    videos: list[EvidenceVideo] = Field(default_factory=list)
+
+    @property
+    def shorts_count(self) -> int:
+        return sum(1 for v in self.videos if v.is_short)
+
+    @field_validator("fetched_at", "published_at")
+    @classmethod
+    def _times_utc(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else _as_utc(value)
+
+    @field_serializer("fetched_at", "published_at")
+    def _dump_times(self, value: datetime | None) -> str | None:
+        return None if value is None else _iso_z(value)
