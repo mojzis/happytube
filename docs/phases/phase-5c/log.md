@@ -64,3 +64,16 @@ Orchestrator pre-checks: baseline 498 passed / 85%.
 - deviations: shared-helper errors are plain StoreError (tests updated); test ids
   now 11 chars; POST without `assessed_at` (curl) not checked.
 - unresolved: bad flags/note in assess silently become empty.
+
+## 4 — verify (verdict: ship)
+- numbers: 607 passed / 87%, poe check green; real data 42 assessed / 14 shown
+  (live + CI-clone export).
+- confirmed R1–R8, Q1–Q3 fixed with original repros; regressions 2a–2g pass;
+  fix deviations can't make a hidden video show.
+- V1 info: rescore token is `assessed_at` only; hand-edited file without it isn't
+  guarded.
+- V2 info: bad flags/note in assess silently empty, no warning.
+
+## Orchestrator probe
+Repo root, final code: export 14 videos; `videos stats` 42 assessed / 0 reviewed;
+`videos list --section shown` 14 = player.
