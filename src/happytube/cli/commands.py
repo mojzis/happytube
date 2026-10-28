@@ -5,6 +5,7 @@ import sys
 from datetime import date
 from functools import wraps
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -15,6 +16,7 @@ from happytube.config.config_manager import ConfigManager
 from happytube.config.settings import get_settings
 from happytube.models.video import MAX_HAPPINESS, MIN_HAPPINESS
 from happytube.stages.assess import AssessStage
+from happytube.stages.base import Stage
 from happytube.stages.enhance import EnhanceStage
 from happytube.stages.fetch import FetchStage
 from happytube.stages.report import ReportStage
@@ -77,6 +79,31 @@ def validate_credentials():
         sys.exit(1)
 
 
+def load_youtube_config(category: str) -> dict[str, Any]:
+    """Return the search params for ``<category>_search``, or ``{}`` if absent."""
+    config_manager = ConfigManager()
+    search_key = f"{category.lower()}_search"
+    try:
+        config_manager.load_all_base_configs()
+        youtube_search = config_manager.get_youtube_search(search_key)
+    except (FileNotFoundError, KeyError):
+        console.print(
+            f"[yellow]⚠ No config found for '{category}', using defaults[/yellow]"
+        )
+        return {}
+    console.print(f"[green]✓ Loaded YouTube search config: {search_key}[/green]")
+    return youtube_search.get("params", {})
+
+
+def _run_stage(
+    step: int, title: str, stage: Stage, target_date: date
+) -> dict[str, Any]:
+    """Print the run-all stage header, then run ``stage`` for ``target_date``."""
+    console.print(f"\n[bold blue]Stage {step}/4: {title}[/bold blue]")
+    console.print("=" * 60)
+    return asyncio.run(stage.run(target_date))
+
+
 @click.group()
 @click.version_option(version="0.0.1", prog_name="happytube")
 @click.pass_context
@@ -130,26 +157,7 @@ def fetch(category: str, max_videos: int, date: str | None):
     )
 
     try:
-        # Load YouTube config if available
-        config_manager = ConfigManager()
-        youtube_config = {}
-
-        # Try to load category-specific config
-        try:
-            config_manager.load_all_base_configs()
-            # Map category name to config key
-            search_key = f"{category.lower()}_search"
-            youtube_search = config_manager.get_youtube_search(search_key)
-            youtube_config = youtube_search.get("params", {})
-            console.print(
-                f"[green]✓ Loaded YouTube search config: {search_key}[/green]"
-            )
-        except (FileNotFoundError, KeyError):
-            console.print(
-                f"[yellow]⚠ No config found for '{category}', using defaults[/yellow]"
-            )
-
-        # Create and run fetch stage
+        youtube_config = load_youtube_config(category)
         stage = FetchStage(youtube_config=youtube_config, max_videos=max_videos)
         result = asyncio.run(stage.run(target_date))
 
@@ -370,7 +378,7 @@ def report(date: str | None, days_back: int):
     help="Number of days to look back for analytics export",
 )
 @require_credentials
-def run_all(  # noqa: PLR0915 - linear script driving all four stages
+def run_all(
     category: str,
     max_videos: int,
     threshold: int,
@@ -400,73 +408,34 @@ def run_all(  # noqa: PLR0915 - linear script driving all four stages
         )
     )
 
-    all_results = {}
-
     try:
-        # Stage 1: Fetch
-        console.print("\n[bold blue]Stage 1/4: Fetch[/bold blue]")
-        console.print("=" * 60)
-
-        config_manager = ConfigManager()
-        youtube_config = {}
-
-        try:
-            config_manager.load_all_base_configs()
-            search_key = f"{category.lower()}_search"
-            youtube_search = config_manager.get_youtube_search(search_key)
-            youtube_config = youtube_search.get("params", {})
-        except (FileNotFoundError, KeyError):
-            pass
-
-        fetch_stage = FetchStage(youtube_config=youtube_config, max_videos=max_videos)
-        fetch_result = asyncio.run(fetch_stage.run(target_date))
-        all_results["fetch"] = fetch_result
-
+        fetch_stage = FetchStage(
+            youtube_config=load_youtube_config(category), max_videos=max_videos
+        )
+        fetch_result = _run_stage(1, "Fetch", fetch_stage, target_date)
         if fetch_result.get("new_videos", 0) == 0:
             console.print("[yellow]⚠ No videos fetched, stopping pipeline[/yellow]")
             return
-
         console.print(f"[green]✓ Fetched {fetch_result['new_videos']} videos[/green]\n")
 
-        # Stage 2: Assess
-        console.print("[bold blue]Stage 2/4: Assess[/bold blue]")
-        console.print("=" * 60)
-
-        assess_stage = AssessStage()
-        assess_result = asyncio.run(assess_stage.run(target_date))
-        all_results["assess"] = assess_result
-
+        assess_result = _run_stage(2, "Assess", AssessStage(), target_date)
         if assess_result.get("assessed_videos", 0) == 0:
             console.print(
                 "[yellow]⚠ No videos assessed, skipping remaining stages[/yellow]"
             )
             return
-
         console.print(
             f"[green]✓ Assessed {assess_result['assessed_videos']} videos "
             f"(avg: {assess_result.get('avg_happiness', 0)}/5)[/green]\n"
         )
 
-        # Stage 3: Enhance
-        console.print("[bold blue]Stage 3/4: Enhance[/bold blue]")
-        console.print("=" * 60)
-
         enhance_stage = EnhanceStage(happiness_threshold=threshold)
-        enhance_result = asyncio.run(enhance_stage.run(target_date))
-        all_results["enhance"] = enhance_result
-
+        enhance_result = _run_stage(3, "Enhance", enhance_stage, target_date)
         console.print(
             f"[green]✓ Enhanced {enhance_result['enhanced_videos']} videos[/green]\n"
         )
 
-        # Stage 4: Report
-        console.print("[bold blue]Stage 4/4: Report[/bold blue]")
-        console.print("=" * 60)
-
-        report_stage = ReportStage()
-        report_result = asyncio.run(report_stage.run(target_date))
-        all_results["report"] = report_result
-
+        report_result = _run_stage(4, "Report", ReportStage(), target_date)
         console.print(
             "[green]✓ Generated report for "
             f"{report_result['videos_reported']} videos[/green]\n"
