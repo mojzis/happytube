@@ -1,12 +1,47 @@
 """Utility functions for HappyTube."""
 
 import html
+import re
 import unicodedata
 from collections import Counter
 from datetime import UTC, date, datetime
 
 # Below this share of the dominant script the text counts as mixed.
 MIXED_SCRIPT_THRESHOLD = 0.5
+
+
+def as_utc(value: datetime) -> datetime:
+    """Treat a naive datetime as UTC and convert an aware one to UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def iso_z(value: datetime) -> str:
+    """Format a datetime in UTC as ISO-8601 with a trailing ``Z``."""
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def fmt_utc(value: datetime | None) -> str:
+    """A time for people: ``2026-10-28 12:00 UTC`` (``—`` for none)."""
+    if value is None:
+        return "—"
+    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def slugify(text: str) -> str:
+    """Kebab-case ASCII slug: strip diacritics, lowercase, non-alphanumerics to ``-``.
+
+    Returns an empty string when nothing alphanumeric is left.
+    """
+    ascii_text = (
+        unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    )
+    return re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
 
 
 def utc_now_iso() -> str:

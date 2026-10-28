@@ -1,45 +1,48 @@
 # Next session
 
-_Updated 2026-10-28._
+_Updated 2026-10-29._
 
 ## Where we are
 
-- Plan: `docs/plan.md` (phases 0–5b done; 5c next; backlogs per phase).
-- Phase 5b merged (PR #13): the player shows the trusted pipeline's output.
-  `happytube serve` → `/player/` (live from `stages/trusted/` + registry); `python
-  -m happytube.web.export` builds `videos.json` for GitHub Pages. Shown = assess
-  `suitable` + non-empty enhance description + channel approved **now**, newest
-  first; scores from assess only (decision 0010, record `docs/phases/phase-5b/`).
-  Flask, `server.py`, `deploy_web.sh` gone.
-- GitHub Pages enabled (Actions source): https://mojzis.github.io/happytube/.
-  Deploys on push to `main` touching `stages/trusted/`, `channels/`,
-  `src/happytube/`, deps or the workflow. First data committed 2026-10-28
-  (`de13fca`: 42 fetched, 14 suitable + enhanced, ~$0.28, 33 units); site live
-  with 14 videos.
+- Plan: `docs/plan.md` (phases 0–5c done; backlogs per phase). No phase 6 defined
+  yet.
+- Phase 5c (PR, branch `phase-5c-video-spot-checks`): human video spot-checks.
+  Records in `video-reviews/<video_id>/<stamp>-<reviewer>.yaml` (verdict
+  suitable/unsuitable/unsure, flags, watched, note, snapshot of the agent's call).
+  `happytube serve` → `/videos` queue (shown-in-player unreviewed first, then the
+  rest, then reviewed; agreement summary) + detail + form; `happytube videos
+  list/show/review/stats [--json]`. A latest human `unsuitable` hides the video
+  from the player and Pages (decision 0011). Record `docs/phases/phase-5c/`.
+- Player / Pages: https://mojzis.github.io/happytube/ — 14 videos from the first
+  trusted run (2026-10-28). Deploy also triggers on `video-reviews/**`.
 - `scripts/daily_run.sh`: `HAPPYTUBE_PIPELINE=trusted HAPPYTUBE_PUSH=1` runs the
-  trusted pipeline and commits + pushes only `stages/trusted/` (retries a failed
-  push next run). No cron yet.
+  trusted pipeline, commits + pushes only `stages/trusted/`. No cron yet. It does
+  not commit `video-reviews/` — commit your spot-checks yourself.
 - Registry: 11 approved, 2 rejected, 2 candidates (ct-decko, zoo-zlin).
 - Process lessons: `docs/process-learnings.md`.
 
 ## Next step
 
-1. **User, later:** start the daily cron (`HAPPYTUBE_PIPELINE=trusted
+1. **User:** spot-check the 14 shown videos at `/videos`, commit + push
+   `video-reviews/`. The agreement summary is the first measure of the agent.
+2. **User, later:** start the daily cron (`HAPPYTUBE_PIPELINE=trusted
    HAPPYTUBE_PUSH=1 scripts/daily_run.sh`) on `main`. Until then, rerun by hand.
-2. Phase 5c (video spot-checks): context.md with the user, then the loop.
+3. Define the next phase from the open decisions below (and what spot-checks show).
 
 ## Open decisions
 
-- 5c: video review record format and location.
 - Grandma-facing player UI (bigger, simpler) — a phase of its own?
+- Rubric tuning from spot-check disagreements (needs reviews first; bump
+  `RUBRIC_VERSION`).
+- Run-to-run score drift check (same video re-scored).
 - When to retire the legacy pipeline (search fetch, happiness assess).
+- Review the 2 candidates (ct-decko, zoo-zlin).
 
 ## Decided
 
 - Runner: manual; the user drives the loop from the session.
 - Registry layout (0003); evidence (0004); agent vetting (0005); web stack FastAPI +
   htmx (0006); review UI local-only (0007); channel approval = source, agents gate
-  videos (0008); trusted pipeline (0009); trusted player (0010: committed
-  `stages/trusted/` feeds Pages, all suitable newest first, hide until enhanced,
-  hide videos of channels no longer approved, one FastAPI app).
+  videos (0008); trusted pipeline (0009); trusted player (0010); video spot-checks
+  (0011: `video-reviews/`, latest human `unsuitable` hides, measure via snapshot).
 - Merge PRs with a merge commit (full history), not squash.

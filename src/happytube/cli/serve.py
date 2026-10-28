@@ -12,7 +12,12 @@ from pathlib import Path
 import click
 
 from happytube.channels.store import ChannelStore
-from happytube.cli.common import channels_dir_option, stages_dir_option
+from happytube.cli.common import (
+    channels_dir_option,
+    stages_dir_option,
+    video_reviews_dir_option,
+)
+from happytube.trusted.video_reviews import VideoReviewStore
 
 
 def _check_port_free(host: str, port: int) -> None:
@@ -38,14 +43,20 @@ def _check_port_free(host: str, port: int) -> None:
 @click.option("--port", default=8000, show_default=True, type=click.IntRange(1, 65535))
 @channels_dir_option
 @stages_dir_option
+@video_reviews_dir_option
 @click.option(
     "--reviewer",
     envvar="HAPPYTUBE_REVIEWER",
     help="Name prefilled in the review form when the browser has none remembered "
     "(env: HAPPYTUBE_REVIEWER).",
 )
-def serve(
-    host: str, port: int, channels_dir: Path, stages_dir: Path, reviewer: str | None
+def serve(  # noqa: PLR0913 - one parameter per CLI option
+    host: str,
+    port: int,
+    channels_dir: Path,
+    stages_dir: Path,
+    video_reviews_dir: Path,
+    reviewer: str | None,
 ) -> None:
     """Serve the channel review UI and the player on HOST:PORT (local only, no
     auth)."""
@@ -74,10 +85,19 @@ def serve(
     click.echo(f"Player: http://{url_host}:{port}/player/")
     click.echo(f"Registry: {channels_dir}")
     click.echo(f"Stages: {stages_dir}")
+    click.echo(f"Video reviews: {video_reviews_dir}")
     if not (stages_dir / "trusted").is_dir():
         click.secho(
             f"Warning: {stages_dir / 'trusted'} does not exist — the player will "
             "show no videos (check --stages-dir / HAPPYTUBE_STAGES_DIR).",
+            fg="yellow",
+            err=True,
+        )
+    if not video_reviews_dir.is_dir():
+        click.secho(
+            f"Warning: {video_reviews_dir} does not exist — the player and the "
+            "video queue will fail until it does (check --video-reviews-dir / "
+            "HAPPYTUBE_VIDEO_REVIEWS_DIR).",
             fg="yellow",
             err=True,
         )
@@ -86,5 +106,6 @@ def serve(
         default_reviewer=reviewer,
         bind_host=host,
         stages_dir=stages_dir,
+        video_reviews=VideoReviewStore(video_reviews_dir),
     )
     uvicorn.run(app, host=host, port=port)

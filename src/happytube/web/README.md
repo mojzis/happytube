@@ -6,14 +6,15 @@ suitable (decision 0010). Deployment: [DEPLOYMENT.md](../../../DEPLOYMENT.md).
 ## Two ways to run it
 
 1. **Local:** `uv run happytube serve` → http://127.0.0.1:8000/player/ — the
-   FastAPI app serves this page and `videos.json` live from `stages/trusted/` and
-   the channel registry (same app as the review UI at `/channels`).
+   FastAPI app serves this page and `videos.json` live from `stages/trusted/`, the
+   channel registry and `video-reviews/` (same app as the review UI at `/channels`
+   and `/videos`).
 2. **GitHub Pages:** CI runs `python -m happytube.web.export`, which writes
    `static/videos.json` (a git-ignored build product), and deploys `static/`.
 
 Both use the same selection (`happytube.trusted.player.select_videos`): assessed
 `suitable: true`, enhanced (non-empty cleaned description), channel currently
-approved; newest first. `player.js` fetches `videos.json` relative to the page,
+approved, not hidden by a human spot-check (decision 0011); newest first. `player.js` fetches `videos.json` relative to the page,
 so it is one code path in both places.
 
 ## Features

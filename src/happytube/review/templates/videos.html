@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Video spot-checks{% endblock %}
+{% block content %}
+<h1>Video spot-checks</h1>
+<section class="card agreement">
+  <h2>Agreement with the agent</h2>
+  {% if stats.reviewed %}
+  <p><strong>{{ stats.rate|pct }}</strong> of decisive spot-checks agree with the agent
+    ({{ stats.agree }} agree, {{ stats.disagree }} disagree, {{ stats.unsure }} unsure;
+    {{ stats.reviewed }} video{{ "s" if stats.reviewed != 1 }} spot-checked of {{ total }}).
+    <a href="/videos?section=disagree">Show disagreements</a></p>
+  <table class="matrix">
+    <thead><tr><th>Latest human verdict</th><th>Agent said suitable</th><th>Agent said unsuitable</th></tr></thead>
+    <tbody>
+    {% for v in ["suitable", "unsuitable", "unsure"] %}
+      <tr><th><span class="verdict verdict-{{ v }}">{{ v }}</span></th><td>{{ stats.count(v, true) }}</td><td>{{ stats.count(v, false) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Compared with the agent's call at the time of each review, not a later rescore. Agent reviews never count.</p>
+  {% else %}
+  <p class="muted">No human spot-checks yet ({{ total }} assessed video{{ "s" if total != 1 }}).</p>
+  {% endif %}
+</section>
+<form class="filters" method="get" action="/videos">
+  <label>Section
+    <select name="section">
+      <option value="">all</option>
+      {% for f in filters %}<option value="{{ f }}"{% if section == f %} selected{% endif %}>{{ titles[f] }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Show</button>
+  <a href="/videos">all</a>
+</form>
+{% if total == 0 %}
+<p class="empty">No assessed trusted videos yet.</p>
+{% else %}
+{% for t in tables %}
+<section class="queue-section" id="section-{{ t.name }}">
+  <h2>{{ t.title }} <span class="count">({{ t.rows|length }})</span></h2>
+  {% if t.rows %}
+  <table class="videos-queue">
+    <thead><tr><th></th><th>Video</th><th>Published</th><th>Agent</th><th>Player</th><th>Spot-check</th></tr></thead>
+    <tbody>
+    {% for v in t.rows %}
+      {% set a = v.assess %}
+      <tr{% if v.state.error or v.disagrees %} class="attention"{% endif %}>
+        <td>{% if a.video_id is video_id %}<img src="https://i.ytimg.com/vi/{{ a.video_id }}/mqdefault.jpg" alt="" width="120" height="68" loading="lazy">{% endif %}</td>
+        <td><a href="/videos/{{ a.video_id }}">{{ a.title }}</a><br><span class="slug">{{ a.channel_name }} · {{ a.duration_s|duration }}</span></td>
+        <td>{{ a.published_at|dt }}</td>
+        <td><span class="verdict verdict-{{ 'suitable' if a.suitable else 'unsuitable' }}">{{ "suitable" if a.suitable else "unsuitable" }}</span><br><span class="muted">calm {{ a.calm if a.calm is not none else "—" }} · happy {{ a.happy if a.happy is not none else "—" }}</span>{% for f in a.flags %} <span class="flag">{{ f }}</span>{% endfor %}{% if a.incomplete %} <span class="flag">incomplete assess</span>{% endif %}</td>
+        <td>{% if v.shown %}<span class="badge shown-yes">shown</span>{% else %}<span class="muted">hidden</span>{% endif %}</td>
+        <td>
+          {% if v.state.error %}<span class="flag">unreadable review</span>
+          {% elif v.latest %}<span class="verdict verdict-{{ v.latest.verdict }}">{{ v.latest.verdict }}</span>{% if v.disagrees %} <span class="flag">disagrees</span>{% endif %}{% if v.assess_changed %} <span class="flag">rescored since</span>{% endif %}
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">None.</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

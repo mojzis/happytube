@@ -1,0 +1,1 @@
+<span id="shown-badge" class="badge {{ 'shown-yes' if video.shown else 'shown-no' }}"{% if oob_shown %} hx-swap-oob="true"{% endif %}>{{ "shown in the player" if video.shown else "not in the player" }}</span>

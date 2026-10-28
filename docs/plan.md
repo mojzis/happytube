@@ -32,7 +32,7 @@ Then the existing pipeline fetches only from approved channels.
 | 4 ✅ | Web review UI | FastAPI + htmx app (decision 0006): Jinja2 pages over `ChannelStore` — channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records. Local only, `happytube serve` (decision 0007). |
 | 5a ✅ | Trusted fetch | `happytube trusted fetch/assess/enhance/run/status`: new long-form videos only from approved channels (playlistItems + UUSH, decision 0004), scored with the shared rubric by Claude Opus 5.5, enhance only `suitable`; `stages/trusted/`; side by side with the legacy pipeline; fails loudly (legacy fetch catch-all fixed too). Context: `docs/phases/phase-5a/context.md`. |
 | 5b ✅ | Trusted player | Player and static export read `stages/trusted/` instead of legacy `data/fetched/`; the player moves from Flask to the FastAPI app and `flask` is dropped. Shown = suitable + enhanced + channel approved now; committed `stages/trusted/` feeds GitHub Pages (decision 0010). Context: `docs/phases/phase-5b/context.md`. |
-| 5c | Video spot-checks | Video review queue + video review records in the review UI (decision 0008: they measure the agent, they don't gate). Record format/location settled in 5c. |
+| 5c ✅ | Video spot-checks | `video-reviews/<id>/` append-only human spot-checks (verdict, flags, watched, note, snapshot of the agent's call); `/videos` queue (shown-in-player unreviewed first) + detail + form, `happytube videos list/show/review/stats`, agreement summary. A human `unsuitable` hides the video from the player and Pages (decision 0011, amends 0008/0010). Context: `docs/phases/phase-5c/context.md`. |
 
 Later (not scheduled): discovery from directories (EAZA/AZA, park services, museums),
 featured-channel one-hop expansion, blocklist, per-person channel lists / distribution.
@@ -140,3 +140,11 @@ branch; merge only after the user says so.
 - Grandma-facing player UI (bigger, simpler, no search) — not started.
 - `HAPPYTUBE_STAGES_DIR` is read-side only; the `trusted` commands write `stages/`
   in the cwd (ties into the `data_root` item).
+
+## Backlog (from phase 5c, not scheduled)
+
+- Rescore guard token is `assessed_at` only: a review POST without it (curl, hand
+  edit) isn't checked (V1).
+- A bad `flags` / `note` in an assess file silently becomes empty, no warning (V2).
+- Default `--video-reviews-dir` is the repo root while `--stages-dir` is the cwd;
+  an export from a scratch cwd reads the repo's reviews silently.

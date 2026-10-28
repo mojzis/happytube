@@ -5,14 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {# htmx 2 does not swap 4xx by default; 422 carries the form with its error. #}
   <meta name="htmx-config" content='{"responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}]}'>
-  <title>{% block title %}Channel review{% endblock %} · HappyTube</title>
+  <title>{% block title %}Review{% endblock %} · HappyTube</title>
   <link rel="stylesheet" href="/static/review.css">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/review.js" defer></script>
 </head>
 <body>
   <header class="site">
-    <a href="/channels" class="home">HappyTube · channel review</a>
+    <span class="home">HappyTube review</span>
+    <nav class="site-nav">
+      <a href="/channels">Channels</a> ·
+      <a href="/videos">Videos</a> ·
+      <a href="/player/">Player</a>
+    </nav>
   </header>
   <main>
     <p id="htmx-error" class="error-message htmx-error" role="alert" hidden></p>

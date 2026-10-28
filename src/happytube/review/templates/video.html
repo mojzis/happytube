@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ a.title }}{% endblock %}
+{% block content %}
+<p><a href="/videos">← video queue</a></p>
+<h1>{{ a.title }} {% include "_shown_badge.html" %}</h1>
+
+<section class="card">
+  <div class="embed">
+    <iframe src="https://www.youtube.com/embed/{{ a.video_id }}?rel=0&amp;modestbranding=1&amp;iv_load_policy=3"
+            title="{{ a.title }}" width="640" height="360" loading="lazy"
+            allow="encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </div>
+  <p><a href="https://www.youtube.com/watch?v={{ a.video_id }}" rel="noopener noreferrer" target="_blank">Open on YouTube</a></p>
+  <dl class="facts">
+    <dt>Channel</dt><dd><a href="/channels/{{ a.channel_slug }}">{{ a.channel_name }}</a></dd>
+    <dt>Published</dt><dd>{{ a.published_at|dt }}</dd>
+    <dt>Duration</dt><dd>{{ a.duration_s|duration }}</dd>
+    <dt>Video id</dt><dd>{{ a.video_id }}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Agent's call <span class="muted">(current assess file)</span></h2>
+  {% if a.incomplete %}<p class="error-message">Incomplete assess: this file lacks {{ a.missing()|join(", ") }}. You can still spot-check (and hide) the video; the review keeps what is there.</p>{% endif %}
+  <dl class="facts">
+    <dt>Suitable</dt><dd><span class="verdict verdict-{{ 'suitable' if a.suitable else 'unsuitable' }}">{{ "suitable" if a.suitable else "unsuitable" }}</span></dd>
+    <dt>Calm / happy</dt><dd>{{ a.calm if a.calm is not none else "—" }} / {{ a.happy if a.happy is not none else "—" }}</dd>
+    <dt>Flags</dt><dd>{% for f in a.flags %}<span class="flag">{{ f }}</span> {% else %}none{% endfor %}</dd>
+    <dt>Note</dt><dd class="text">{{ a.note or "—" }}</dd>
+    <dt>Assessed</dt><dd>{{ a.assessed_at|dt }}, rubric {{ "v%s"|format(a.rubric_version) if a.rubric_version else "—" }}</dd>
+    <dt>File</dt><dd class="path">{{ video.path }}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Descriptions</h2>
+  <h3>Shown in the player <span class="muted">(enhanced)</span></h3>
+  {% if video.enhanced %}<p class="text">{{ video.enhanced }}</p>{% else %}<p class="empty">No enhanced description.</p>{% endif %}
+  <h3>Original</h3>
+  {% if video.description %}<p class="text original">{{ video.description }}</p>{% else %}<p class="empty">Empty.</p>{% endif %}
+</section>
+
+{% include "_video_reviews.html" %}
+{% endblock %}

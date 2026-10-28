@@ -173,10 +173,12 @@ def test_refusal_writes_nothing_and_fails(store):
 def test_output_for_other_videos_is_an_error(store):
     evidence = make_evidence()
     seed(store, evidence=evidence)
-    client = FakeVetClient(make_evidence(n_long=2))  # scores only v0, v1
+    client = FakeVetClient(make_evidence(n_long=2))  # scores only the first two
     run = vet_channels(store, client, ["zoo-praha"])
     assert run.results[0].status == "error"
-    assert "missing v2, v3, v4, v5" in (run.results[0].message or "")
+    assert "missing v0000000002, v0000000003, v0000000004, v0000000005" in (
+        run.results[0].message or ""
+    )
     assert _files(store, "zoo-praha", "vet") == []
 
 

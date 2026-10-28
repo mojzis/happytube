@@ -10,7 +10,7 @@ new videos only from human-approved channels, scores each with the calm/happy ru
 (Claude) and cleans the descriptions of the suitable ones. The legacy pipeline
 (search by category, happiness 1–5) still runs side by side. The player shows only
 the trusted pipeline's suitable, enhanced videos of currently approved channels
-(decision 0010).
+(decision 0010) that no human spot-check hides (decision 0011).
 
 ## Project plan
 
@@ -120,11 +120,38 @@ reports tokens and an estimated cost (at Opus 5.5 rates, failed calls included);
 rejected key, missing permission or no credit stops the run (`not_vetted` for the
 rest).
 
+### Video spot-checks (decision 0011)
+
+```bash
+happytube videos list [--section shown|unreviewed|reviewed|disagree] [--json]
+happytube videos show VIDEO_ID [--json]
+happytube videos review VIDEO_ID --reviewer mojzis --role human \
+    --verdict suitable|unsuitable|unsure --watched full|part|title \
+    [--flag scary …] [--notes …] [--json]
+happytube videos stats [--json]
+```
+
+No API keys. Group options (before the subcommand): `--channels-dir`,
+`--stages-dir`, `--video-reviews-dir` / `HAPPYTUBE_VIDEO_REVIEWS_DIR` (default
+`video-reviews/` at the repo root; must exist — missing is an error, never "no
+reviews"). The queue is every assessed trusted video: unreviewed ones the player
+shows now first, then the other unreviewed, then reviewed (unreadable,
+disagreements, newest). One file per review in `video-reviews/<id>/`, append-only;
+each snapshots the agent's call (`agent_suitable`, `rubric_version`,
+`assessed_at`; the last two `null` if the assess file lacks them — such a video is
+still queued, marked "incomplete assess"), and `stats` compares against that
+snapshot, not a later rescore. The UI form refuses (422) a review of a video
+rescored since the page was loaded.
+The latest *human* review decides; agent reviews are stored and never count. A
+human `unsuitable` (or an unreadable review file) hides the video from the player
+and the export; `suitable` never shows a video the agent scored unsuitable. Notes
+are public (public repo). Commit and push reviews yourself.
+
 ### Review UI
 
 ```bash
 happytube serve [--host 127.0.0.1] [--port 8000] [--channels-dir PATH] \
-    [--stages-dir PATH] [--reviewer NAME]
+    [--stages-dir PATH] [--video-reviews-dir PATH] [--reviewer NAME]
 ```
 
 Local FastAPI + htmx page (decision 0007) at `http://127.0.0.1:8000/channels`: a
@@ -134,7 +161,12 @@ unsure form. It needs **no API keys** and writes the same review files as
 `channels review` (always `role: human`) into the registry — commit and push them
 yourself; the app runs no git. `--channels-dir` is the same option and env as the
 `channels` group; `--reviewer` / `HAPPYTUBE_REVIEWER` prefills the form (it beats the
-name the browser remembers). Only loopback `Host` headers and same-origin POSTs
+name the browser remembers). Video spot-checks: `/videos` (queue + agreement
+summary, `?section=disagree`), `/videos/{id}` (agent call, original and enhanced
+description, YouTube embed, reviews, form), `POST /videos/{id}/reviews` (always
+`role: human`, into `video-reviews/`); an invalid or not-assessed id is a 404, a
+missing `video-reviews/` a 500 (and a warning at start). Nav: Channels · Videos ·
+Player. Only loopback `Host` headers and same-origin POSTs
 are accepted; a non-loopback `--host` (LAN IPv4/IPv6) warns (no auth), a wildcard
 `0.0.0.0` / `::` is refused. htmx is vendored in
 `review/static/`, no external JS/CSS. The same app serves the player (below).
@@ -147,20 +179,24 @@ uv run python -m happytube.web.export [--stages-dir stages] [--channels-dir …]
 ```
 
 Decision 0010. Shown iff assess `suitable: true` **and** an enhance file with a
-non-empty `enhanced_description` **and** the channel is approved *now*; fields from
+non-empty `enhanced_description` **and** the channel is approved *now* **and** no
+human spot-check hides it (rule 4, decision 0011: latest human verdict
+`unsuitable`, or an unreadable review file); fields from
 assess, only the description from enhance; newest `published_at` first. One pure
 rule, `trusted.player.select_videos`, used by `GET /player/videos.json` (live per
-request from `--stages-dir` / `HAPPYTUBE_STAGES_DIR`, default `stages/` in the cwd)
-and the export. That option / env only says where the player and the export
+request from `--stages-dir` / `HAPPYTUBE_STAGES_DIR`, default `stages/` in the cwd,
+and `--video-reviews-dir`) and the export. That option / env only says where the player and the export
 **read**; the `trusted` commands always write `stages/` in the cwd. `serve` warns at
 start (and the route logs once) when `<stages-dir>/trusted/` is missing; a stage dir
 not named `YYYY-MM-DD` is skipped with a warning. A bad stage file is skipped with a warning naming it. `player.js`
 fetches `videos.json` relative to the page (one path, local and Pages). The export
 writes `web/static/videos.json` (git-ignored build product); a missing
-`stages/trusted/` or registry exits 1, an empty selection warns, exit 0.
-`.github/workflows/deploy.yml` builds it from the **committed `stages/trusted/`** +
-`channels/` and deploys to https://mojzis.github.io/happytube/ on a push to `main`
-touching them or the player (or manually); see [DEPLOYMENT.md](DEPLOYMENT.md).
+`stages/trusted/`, registry or `video-reviews/` exits 1, an empty selection
+warns, exit 0. `.github/workflows/deploy.yml` builds it from the **committed
+`stages/trusted/`** + `channels/` + `video-reviews/` and deploys to
+https://mojzis.github.io/happytube/ on a push to `main` touching them or
+`src/happytube/**` (or manually); see [DEPLOYMENT.md](DEPLOYMENT.md). The daily
+script never commits `video-reviews/`.
 
 ## Stack
 
@@ -262,7 +298,8 @@ from the repo root.
 ### Key modules
 
 - `cli/commands.py` — click entry point `happytube`; `cli/channels.py` — the
-  `channels` subgroup; `cli/trusted.py` — the `trusted` subgroup; `cli/serve.py` —
+  `channels` subgroup; `cli/trusted.py` — the `trusted` subgroup; `cli/videos.py` — the `videos`
+  subgroup (spot-checks); `cli/serve.py` —
   `happytube serve`; `cli/common.py` — shared options (`--channels-dir`,
   `--json`), output helpers, `make_youtube_client`.
 - `claude.py` — the shared Claude call (`MODEL` = Opus 5.5, effort, structured
@@ -271,16 +308,25 @@ from the repo root.
 - `trusted/` — `stages.py` (`TrustedStage`, `pending`, `is_video_id`, `status_counts`), `fetch.py`
   (`fetch_trusted`, `FetchRun`), `assess.py`, `enhance.py`, `runs.py` (`ItemRun`,
   `run_items`, `TrustedClient` protocol), `player.py` (`select_videos`,
-  `PlayerVideo`, `read_stage`, `player_videos` — the player's selection).
-- `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),
+  `PlayerVideo`, `read_stage`, `player_videos` — the player's selection),
+  `video_reviews.py` (`VideoReview`, `VideoReviewStore`, `ReviewState`,
+  `hidden_ids`, `agreement`, `VIDEO_REVIEWS_DIR`), `spot_checks.py` (the
+  spot-check queue: `SpotVideo`, `spot_videos`, `sections`, `in_section`,
+  `load_spot_checks`, `load_video`, `new_review`).
+- `records.py` — append-only record files shared by `channels/store.py` and
+  `video_reviews.py` (stamp naming, `-N` collisions, ordered load, `StoreError`;
+  `ChannelStoreError` a subclass; unreadable / non-UTF-8 files are `StoreError` too).
+- `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`),
   `store.py` (`ChannelStore`, `derive_status`), `evidence.py` (pure API → `Evidence`
   builder, Shorts by `UUSH` ids or duration), `collect.py` (resolve / evidence
   runs), `vet.py` (pure vetting: flags, prompt, verdict rule, report) and
   `vet_run.py` (`AnthropicVetClient` behind a `VetClient` protocol, `vet_channels`);
   the CLI and the future web UI share them.
 - `review/` — local review UI + player: `app.py` (`create_app(store,
-  default_reviewer=…, stages_dir=…)` factory, routes incl. `/player/`, Host/Origin
-  guard), `queue.py` (pure `queue_sections` sort),
+  default_reviewer=…, stages_dir=…, video_reviews=…)` factory, channel routes,
+  `/player/`, Host/Origin guard), `videos.py` (`/videos` spot-check routes),
+  `pages.py` (shared rendering, `FormError`, reviewer cookie), `queue.py` (pure
+  `queue_sections` sort),
   `templates/`, `static/` (vendored htmx, `review.css`); reads and writes only
   through `ChannelStore`.
 - `rubric.py` — calm/happy rubric (`RUBRIC_VERSION`), video flags, `VideoScore`,
@@ -290,7 +336,7 @@ from the repo root.
 - `config/settings.py` (pydantic settings from `.env`), `config/config_manager.py`
   (YAML from `config/base/`).
 - `models/markdown.py` (`MarkdownFile`), `models/video.py` (`Video`, parquet export).
-- `utils/` — text-script detection, `utc_now_iso()`, `first_text()` for Claude
+- `utils/` — text-script detection, `utc_now_iso()`, time helpers (`as_utc`, `iso_z`, `utc_now`, `fmt_utc`), `slugify`, `first_text()` for Claude
   responses, logging setup. `paths.py` — `PROJECT_ROOT`.
 
 ### Storage Structure
@@ -325,6 +371,12 @@ channels/
     │   └── 20261028T185312Z.yaml
     └── vet/                            # append-only agent vet reports (frontmatter + markdown)
         └── 20261028T201500Z.md
+
+# Video spot-checks (git-tracked, decision 0011; dir must exist)
+video-reviews/
+├── README.md                           # format; notes are public
+└── <video_id>/                         # append-only, one file per review
+    └── 20261028T201500Z-mojzis.yaml    # verdict, flags, watched, notes + agent snapshot
 
 # Analytics exports
 parquet/
@@ -361,9 +413,11 @@ data/
 
 # Review UI (happytube serve)
 src/happytube/review/
-├── app.py              # FastAPI app factory, routes, Host/Origin guard
+├── app.py              # FastAPI app factory, channel + player routes, Host/Origin guard
+├── videos.py           # /videos spot-check routes
+├── pages.py            # shared rendering, FormError, reviewer cookie
 ├── queue.py            # pure queue order (queue_sections)
-├── templates/          # base, queue, channel + partials, error (Jinja, autoescaped)
+├── templates/          # base, queue, channel, videos, video + partials, error (Jinja, autoescaped)
 └── static/             # htmx.min.js (vendored 2.0.11), review.js (htmx errors), review.css
 
 # Web player

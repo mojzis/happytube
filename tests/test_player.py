@@ -17,7 +17,17 @@ from happytube.trusted.player import (
     videos_json,
 )
 from happytube.trusted.stages import TrustedStage
-from tests.player_helpers import DAY, assess_fm, vid, write
+from happytube.trusted.video_reviews import VideoReviewsMissingError, VideoReviewStore
+from tests.player_helpers import (
+    DAY,
+    UNREADABLE,
+    assess_fm,
+    make_unreadable,
+    review_store,
+    vid,
+    vreview,
+    write,
+)
 from tests.trusted_helpers import add_channel
 
 LATER = date(2026, 10, 27)
@@ -41,8 +51,8 @@ def enh(n: int, text: object = "Calm giraffes.", day: date = DAY) -> StageRecord
     )
 
 
-def shown_ids(assess, enhance, statuses=APPROVED) -> list[str]:
-    return [v.video_id for v in select_videos(assess, enhance, statuses)]
+def shown_ids(assess, enhance, statuses=APPROVED, hidden=()) -> list[str]:
+    return [v.video_id for v in select_videos(assess, enhance, statuses, hidden)]
 
 
 @pytest.mark.parametrize(
@@ -99,7 +109,7 @@ def test_selection_rule(case, assess, enhance, expected):
 
 def test_fields_from_assess_and_description_from_enhance():
     [video] = select_videos(
-        [rec(assess_fm(1))], [enh(1, "  Calm giraffes.\n")], APPROVED
+        [rec(assess_fm(1))], [enh(1, "  Calm giraffes.\n")], APPROVED, ()
     )
     assert videos_json([video]) == [
         {
@@ -160,7 +170,8 @@ def test_player_videos_over_files_and_registry(tmp_path):
         "maybe": "candidate",
         "zoo": "approved",
     }
-    assert [v.video_id for v in player_videos(stages, store)] == [vid(1)]
+    reviews = review_store(tmp_path)
+    assert [v.video_id for v in player_videos(stages, store, reviews)] == [vid(1)]
 
 
 def test_channel_with_broken_reviews_is_hidden(tmp_path, caplog):
@@ -174,6 +185,75 @@ def test_channel_with_broken_reviews_is_hidden(tmp_path, caplog):
     assert "zoo" in caplog.text
 
 
+@pytest.mark.parametrize("kind", UNREADABLE)
+def test_channel_with_undecodable_review_is_hidden(tmp_path, kind, caplog):
+    store = ChannelStore(tmp_path / "channels")
+    add_channel(store, "zoo", "UCzoo")
+    bad = store.root / "zoo" / "reviews" / "20990101T000000Z-x.yaml"
+    make_unreadable(bad, kind)
+    with caplog.at_level(logging.WARNING):
+        assert channel_statuses(store) == {}
+    assert str(bad) in caplog.text
+
+
 def test_missing_stage_dirs_mean_nothing_shown(tmp_path):
     store = ChannelStore(tmp_path / "channels")
-    assert player_videos(tmp_path / "stages", store) == []
+    assert player_videos(tmp_path / "stages", store, review_store(tmp_path)) == []
+
+
+def test_rule4_hidden_ids_never_shown():
+    assess = [rec(assess_fm(1)), rec(assess_fm(2))]
+    assert shown_ids(assess, [enh(1), enh(2)], hidden={vid(1)}) == [vid(2)]
+
+
+def _shown_with_reviews(tmp_path, *reviews):
+    store = ChannelStore(tmp_path / "channels")
+    add_channel(store, "zoo", "UCzoo")
+    stages = tmp_path / "stages"
+    write(stages, "assess", 1, assess_fm(1))
+    write(stages, "enhance", 1, dict(enh(1).frontmatter))
+    write(stages, "assess", 2, assess_fm(2, suitable=False))
+    write(stages, "enhance", 2, dict(enh(2).frontmatter))
+    videos = review_store(tmp_path)
+    for n, review in reviews:
+        videos.add_review(vid(n), review)
+    return [v.video_id for v in player_videos(stages, store, videos)]
+
+
+@pytest.mark.parametrize(
+    ("case", "reviews", "expected"),
+    [
+        ("no reviews", [], [vid(1)]),
+        ("human unsuitable hides", [(1, vreview("unsuitable"))], []),
+        (
+            "agent unsuitable ignored",
+            [(1, vreview("unsuitable", role="agent"))],
+            [vid(1)],
+        ),
+        ("unsure changes nothing", [(1, vreview("unsure"))], [vid(1)]),
+        (
+            "later human suitable shows again",
+            [(1, vreview("unsuitable")), (1, vreview("suitable", minutes=1))],
+            [vid(1)],
+        ),
+        ("suitable never overrides agent", [(2, vreview("suitable"))], [vid(1)]),
+        ("orphan review hides nothing", [(9, vreview("unsuitable"))], [vid(1)]),
+    ],
+)
+def test_rule4_over_review_files(tmp_path, case, reviews, expected):
+    assert _shown_with_reviews(tmp_path, *reviews) == expected, case
+
+
+def test_unreadable_review_hides_with_warning(tmp_path, caplog):
+    bad = tmp_path / "video-reviews" / vid(1) / "20261028T120000Z-x.yaml"
+    bad.parent.mkdir(parents=True)
+    bad.write_text("verdict: [", encoding="utf-8")
+    with caplog.at_level(logging.WARNING):
+        assert _shown_with_reviews(tmp_path) == []
+    assert str(bad) in caplog.text
+
+
+def test_missing_reviews_dir_raises(tmp_path):
+    store = ChannelStore(tmp_path / "channels")
+    with pytest.raises(VideoReviewsMissingError):
+        player_videos(tmp_path / "stages", store, VideoReviewStore(tmp_path / "no"))

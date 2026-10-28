@@ -24,7 +24,6 @@ from happytube.channels.models import (
     VERDICTS,
     Channel,
     Review,
-    slugify,
 )
 from happytube.channels.store import (
     ChannelEntry,
@@ -43,6 +42,7 @@ from happytube.cli.common import (
     with_message,
 )
 from happytube.config.settings import AnthropicSettings
+from happytube.utils import slugify
 
 
 @click.group()

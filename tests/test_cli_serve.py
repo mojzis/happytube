@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from happytube.channels.store import ChannelStore
 from happytube.cli.commands import cli
 from happytube.paths import PROJECT_ROOT
-from tests.player_helpers import PLAYER_JSON, write_shown
+from tests.player_helpers import PLAYER_JSON, review_store, vid, vreview, write_shown
 from tests.review_helpers import QUEUE, detail_url, seed_vetted
 from tests.trusted_helpers import add_channel
 
@@ -27,6 +27,7 @@ def run_calls(monkeypatch):
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: calls.append((app, kw)))
     monkeypatch.delenv("HAPPYTUBE_CHANNELS_DIR", raising=False)
     monkeypatch.delenv("HAPPYTUBE_STAGES_DIR", raising=False)
+    monkeypatch.delenv("HAPPYTUBE_VIDEO_REVIEWS_DIR", raising=False)
     monkeypatch.delenv("HAPPYTUBE_REVIEWER", raising=False)
     monkeypatch.delenv("YTKEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -128,6 +129,32 @@ def test_serve_warns_when_the_trusted_stages_are_missing(served, tmp_path):
     assert result.exit_code == 0, result.output
     assert f"Warning: {tmp_path / 'x' / 'trusted'} does not exist" in result.stderr
     assert len(served) == 1
+
+
+def test_serve_warns_when_video_reviews_missing_and_player_fails(served, tmp_path):
+    missing = tmp_path / "vr"
+    result = CliRunner().invoke(cli, ["serve", "--video-reviews-dir", str(missing)])
+
+    assert result.exit_code == 0, result.output
+    assert f"Warning: {missing} does not exist" in result.stderr
+    [(app, _)] = served
+    assert TestClient(app, base_url=LOCALHOST).get(PLAYER_JSON).status_code == 500
+
+
+def test_serve_video_reviews_dir_env_reaches_the_player(served, tmp_path, monkeypatch):
+    registry = tmp_path / "channels"
+    add_channel(ChannelStore(registry), "zoo", "UCzoo")
+    write_shown(tmp_path / "stages", "zoo")
+    reviews = review_store(tmp_path)
+    reviews.add_review(vid(1), vreview("unsuitable"))
+    monkeypatch.setenv("HAPPYTUBE_VIDEO_REVIEWS_DIR", str(reviews.root))
+
+    result = CliRunner().invoke(cli, ["serve", "--channels-dir", str(registry)])
+
+    assert result.exit_code == 0, result.output
+    assert f"Video reviews: {reviews.root}" in result.output
+    [(app, _)] = served
+    assert TestClient(app, base_url=LOCALHOST).get(PLAYER_JSON).json() == []
 
 
 @pytest.mark.parametrize("host", ["192.168.1.5", "fe80::1", "[fe80::1]"])

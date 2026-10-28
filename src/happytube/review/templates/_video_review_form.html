@@ -1,0 +1,38 @@
+<form class="review-form" method="post" action="/videos/{{ a.video_id }}/reviews"
+      hx-post="/videos/{{ a.video_id }}/reviews" hx-target="#reviews" hx-swap="outerHTML">
+  <h3>Your spot-check</h3>
+  <input type="hidden" name="assessed_at" value="{{ video.call_token }}">
+  <p class="error-message htmx-error" role="alert" hidden></p>
+  {% if error %}<p class="error-message" role="alert">{{ error }}</p>{% endif %}
+  <label>Reviewer
+    <input type="text" name="reviewer" value="{{ form.reviewer }}" required autocomplete="name">
+  </label>
+  <p class="muted">The agent gates every video of an approved channel; spot-checks
+    measure how often it is right (decisions 0008, 0011).
+    <strong>unsuitable</strong> also hides this video from the player;
+    <strong>suitable</strong> never shows a video the agent scored unsuitable;
+    <strong>unsure</strong> changes nothing.</p>
+  <fieldset>
+    <legend>Verdict</legend>
+    {% for v in verdicts %}
+    <label class="choice"><input type="radio" name="verdict" value="{{ v }}"{% if form.verdict == v %} checked{% endif %} required> {{ v }}</label>
+    {% endfor %}
+  </fieldset>
+  <fieldset>
+    <legend>Watched</legend>
+    {% for w in watched %}
+    <label class="choice"><input type="radio" name="watched" value="{{ w }}"{% if form.watched == w %} checked{% endif %} required> {{ "title only" if w == "title" else w }}</label>
+    {% endfor %}
+  </fieldset>
+  <fieldset>
+    <legend>Flags (optional)</legend>
+    {% for f in flags %}
+    <label class="choice"><input type="checkbox" name="flags" value="{{ f }}"{% if f in form.flags %} checked{% endif %}> {{ f }}</label>
+    {% endfor %}
+  </fieldset>
+  <label>Notes (optional — public: the repo is public)
+    <textarea name="notes" rows="3">{{ form.notes }}</textarea>
+  </label>
+  <button type="submit">Save spot-check</button>
+  <p class="muted">Saved as a human review in video-reviews/; commit and push it yourself.</p>
+</form>

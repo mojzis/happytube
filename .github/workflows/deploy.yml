@@ -1,15 +1,17 @@
 name: Deploy HappyTube to GitHub Pages
 
-# The player's data is the committed stages/trusted/ + channels/ (decision 0010):
+# The player's data is the committed stages/trusted/ + channels/ (decision 0010)
+# + video-reviews/ (decision 0011):
 # videos.json is built here, never committed. A push to main touching them, the
 # player or the code that builds the selection redeploys; the export fails the
-# build if stages/trusted/ is missing.
+# build if stages/trusted/, channels/ or video-reviews/ is missing.
 on:
   push:
     branches: [main]
     paths:
       - "stages/trusted/**"
       - "channels/**"
+      - "video-reviews/**"
       - "src/happytube/**"
       - "pyproject.toml"
       - "uv.lock"

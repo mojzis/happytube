@@ -2,11 +2,13 @@
 
 ``python -m happytube.web.export`` writes the same selection the local
 ``/player/videos.json`` serves (``happytube.trusted.player``), from
-``stages/trusted/`` and the channel registry, into ``web/static/``. The deploy
+``stages/trusted/``, the channel registry and ``video-reviews/`` (a human
+``unsuitable`` hides a video, decision 0011), into ``web/static/``. The deploy
 workflow runs it from the repo root.
 
-Fails loudly: a missing ``stages/trusted/`` or registry directory exits non-zero,
-so a wrong path in CI never deploys an empty player. Present but selecting
+Fails loudly: a missing ``stages/trusted/``, registry or video-reviews directory
+exits non-zero, so a wrong path in CI never deploys an empty player nor one
+showing videos a human hid. Present but selecting
 nothing is a warning and exit 0.
 """
 
@@ -20,6 +22,7 @@ from pathlib import Path
 from happytube.channels.store import ChannelStore
 from happytube.paths import PROJECT_ROOT
 from happytube.trusted.player import player_videos, videos_json
+from happytube.trusted.video_reviews import VIDEO_REVIEWS_DIR, VideoReviewStore
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +33,17 @@ class ExportError(Exception):
     """The export's input is not where it should be; nothing was written."""
 
 
-def export_videos(stages_dir: Path, channels_dir: Path, output: Path) -> int:
+def export_videos(
+    stages_dir: Path, channels_dir: Path, output: Path, video_reviews_dir: Path
+) -> int:
     """Write the selection to ``output``; the number of videos written."""
-    for directory in (stages_dir / "trusted", channels_dir):
+    for directory in (stages_dir / "trusted", channels_dir, video_reviews_dir):
         if not directory.is_dir():
             msg = f"{directory} not found (run from the repo root, or pass the path)"
             raise ExportError(msg)
-    videos = player_videos(stages_dir, ChannelStore(channels_dir))
+    videos = player_videos(
+        stages_dir, ChannelStore(channels_dir), VideoReviewStore(video_reviews_dir)
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(videos_json(videos), ensure_ascii=False, indent=2)
     output.write_text(text + "\n", encoding="utf-8")
@@ -73,6 +80,13 @@ def _parser() -> argparse.ArgumentParser:
         "at the repo root).",
     )
     parser.add_argument(
+        "--video-reviews-dir",
+        type=Path,
+        default=Path(os.environ.get("HAPPYTUBE_VIDEO_REVIEWS_DIR", VIDEO_REVIEWS_DIR)),
+        help="Video spot-check reviews (env: HAPPYTUBE_VIDEO_REVIEWS_DIR; "
+        "default: video-reviews/ at the repo root). Must exist.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=STATIC_DIR / "videos.json",
@@ -85,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     args = _parser().parse_args(argv)
     try:
-        export_videos(args.stages_dir, args.channels_dir, args.output)
+        export_videos(
+            args.stages_dir, args.channels_dir, args.output, args.video_reviews_dir
+        )
     except ExportError as e:
         logger.error("Export failed: %s", e)  # noqa: TRY400 — message, no traceback
         return 1

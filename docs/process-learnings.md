@@ -458,3 +458,43 @@ orchestrator probe). Loop: dev → review ‖ QA → fix → combined verify →
 ### Open questions (new)
 - Default runtime QA item for any phase that touches `scripts/`?
 
+
+## Phase 5c (2026-10-29)
+
+Source: `docs/phases/phase-5c/` (video spot-checks, 4 agent steps after dev + 1
+orchestrator probe). Loop: dev → review ‖ QA → fix → combined verify → probe. No
+paid calls in the whole phase.
+
+### Loop design
+- Failure scenarios in context.md held again (10 listed, all QA-seeded cases
+  passed). The mediums came from cases outside the list.
+- Review and QA overlapped on the medium (R2 = Q1, undecodable review file → 500s):
+  logic and runtime found the same bug, as in phases 4 and 5a.
+- One fix round + combined verify held again (0–5c); verify found info items only.
+- The orchestrator added a review item from a dev deviation (queue skips assess
+  files lacking snapshot fields); it became R1 medium (shown videos unhideable).
+
+### Briefs & context
+- Four open choices in one question call, recommended first; the user took all
+  four. Rest settled by the orchestrator; dev deviated on details only.
+- Fix brief picked the fix design per finding and named repros for verify; both
+  worked without questions.
+
+### Agent reports
+- A dev `deviation` can be a finding. Trace each against the phase goal before
+  review, or give review that item.
+
+### Answers to earlier open questions
+- *Should context.md list the failure scenarios?* (5a) Second phase with yes: dev
+  designed for all, QA's seeded cases passed. Findings move to cases not listed.
+- *Should the orchestrator probe after verify be a named step?* (5a) Ran in 5a,
+  5b and 5c, cheap each time (here no paid calls). Treat it as a step.
+- *Default runtime QA item for phases touching `scripts/`?* (5b) No evidence: 5c
+  touched no scripts (only `deploy.yml` paths; QA's CI simulation covered it).
+- *Model score drift across runs?* (5a) Not checked; 5c stores the agent call the
+  human saw (snapshot), so later spot-check stats can measure it.
+
+### Open questions (new)
+- Routine review item: "trace each dev deviation against the goal"?
+- Guard reviews posted without `assessed_at` (curl, hand edits), or is the UI
+  path enough?

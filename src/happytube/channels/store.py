@@ -15,14 +15,12 @@ exclusively, so concurrent writers never overwrite each other — except
 import os
 import re
 import tempfile
-from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn
 
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from happytube.channels.models import (
     SLUG_PATTERN,
@@ -31,22 +29,33 @@ from happytube.channels.models import (
     Review,
     Status,
     VetReport,
-    _iso_z,
-    slugify,
 )
+from happytube.records import (
+    StoreError,
+    dump_yaml,
+    latest_by_name,
+    load_model,
+    load_records,
+    load_yaml,
+    read_text,
+    review_stem,
+    stamp,
+    validate,
+    write_new,
+)
+from happytube.utils import iso_z
 
 CHANNEL_FILE = "channel.yaml"
 REVIEWS_DIR = "reviews"
 EVIDENCE_DIR = "evidence"
 VET_DIR = "vet"
-YAML_SUFFIX = ".yaml"
 MARKDOWN_SUFFIX = ".md"
 DECISIVE_VERDICTS: dict[str, Status] = {"approve": "approved", "reject": "rejected"}
-_COLLISION_SUFFIX = re.compile(r"^(?P<base>.+)-(?P<n>\d+)$")
 
 
-class ChannelStoreError(Exception):
-    """Base error for registry operations; the message is user-facing."""
+class ChannelStoreError(StoreError):
+    """A registry problem. A broken file is the shared ``StoreError`` (from
+    ``happytube.records``); catch that for "anything wrong in a store"."""
 
 
 class ChannelExistsError(ChannelStoreError):
@@ -76,18 +85,6 @@ def derive_status(reviews: list[Review]) -> Status:
     return DECISIVE_VERDICTS[latest.verdict]
 
 
-def _collision_index(name: str, names: set[str], suffix: str = YAML_SUFFIX) -> int:
-    """Write order of a record file among same-stem files: base is 1, ``-N`` is N.
-
-    A trailing ``-N`` only counts as a collision suffix when the base file exists,
-    so a reviewer slug that ends in digits (``bot-2``) is not mistaken for one.
-    """
-    match = _COLLISION_SUFFIX.match(name.removesuffix(suffix))
-    if match and f"{match['base']}{suffix}" in names:
-        return int(match["n"])
-    return 1
-
-
 @dataclass
 class StoredVet:
     """A vet report's frontmatter and the file it was read from."""
@@ -99,7 +96,7 @@ class StoredVet:
         """Verdict, flags, scores and suitable count — no per-video detail."""
         r = self.report
         return {
-            "vetted_at": _iso_z(r.vetted_at),
+            "vetted_at": iso_z(r.vetted_at),
             "verdict": r.verdict,
             "model_verdict": r.model_verdict,
             "flags": list(r.flags),
@@ -159,7 +156,7 @@ class ChannelEntry:
                 else None
             ),
             "vetted_at": (
-                _iso_z(self.latest_vet.report.vetted_at) if self.latest_vet else None
+                iso_z(self.latest_vet.report.vetted_at) if self.latest_vet else None
             ),
             "vet_verdict": self.latest_vet.report.verdict if self.latest_vet else None,
         }
@@ -181,43 +178,9 @@ class ChannelEntry:
         }
 
 
-def _dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
-
-
-def _load_yaml(path: Path) -> dict[str, Any]:
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as e:
-        msg = f"{path}: invalid YAML: {e}"
-        raise ChannelStoreError(msg) from e
-    if not isinstance(data, dict):
-        msg = f"{path}: expected a YAML mapping"
-        raise ChannelStoreError(msg)
-    return data
-
-
-def _validate[M: BaseModel](path: Path, data: dict[str, Any], model: type[M]) -> M:
-    """Validate data read from ``path`` as ``model``; errors name the file."""
-    try:
-        return model.model_validate(data)
-    except ValidationError as e:
-        problems = "; ".join(
-            f"{'.'.join(str(p) for p in err['loc']) or '(file)'}: {err['msg']}"
-            for err in e.errors()
-        )
-        msg = f"{path}: {problems}"
-        raise ChannelStoreError(msg) from e
-
-
-def _load_model[M: BaseModel](path: Path, model: type[M]) -> M:
-    """Validate a YAML file as ``model``; errors name the file."""
-    return _validate(path, _load_yaml(path), model)
-
-
 def _read_frontmatter(path: Path) -> dict[str, Any]:
     """The YAML frontmatter mapping of a markdown file (the body is for people)."""
-    text = path.read_text(encoding="utf-8")
+    text = read_text(path)
     # The closing delimiter is a line that is exactly ``---``; inside the YAML a
     # longer dash run or an indented continuation line never matches it.
     head, sep, _body = text.removeprefix("---\n").partition("\n---\n")
@@ -237,74 +200,7 @@ def _read_frontmatter(path: Path) -> dict[str, Any]:
 
 def _load_frontmatter[M: BaseModel](path: Path, model: type[M]) -> M:
     """Validate a markdown file's frontmatter as ``model``; errors name the file."""
-    return _validate(path, _read_frontmatter(path), model)
-
-
-def _load_records[M: BaseModel](
-    directory: Path,
-    model: type[M],
-    timestamp: Callable[[M], datetime],
-    suffix: str = YAML_SUFFIX,
-    load: Callable[[Path, type[M]], M] = _load_model,
-) -> list[M]:
-    """Every ``*<suffix>`` record file in ``directory``, read by ``load``, in write
-    order: by ``timestamp``, then by the filename's collision suffix (base file
-    first, then ``-2``, ``-3`` …)."""
-    if not directory.is_dir():
-        return []
-    paths = list(directory.glob(f"*{suffix}"))
-    names = {p.name for p in paths}
-    loaded = [(load(p, model), p.name) for p in paths]
-    loaded.sort(
-        key=lambda pair: (
-            timestamp(pair[0]),
-            _collision_index(pair[1], names, suffix),
-            pair[1],
-        )
-    )
-    return [record for record, _ in loaded]
-
-
-def _latest_by_name(directory: Path, suffix: str = YAML_SUFFIX) -> Path | None:
-    """The newest record file by name alone: its timestamp stem, then the same
-    collision-suffix rule as ``_load_records``. Valid for files named by
-    ``_stamp`` of the record's own timestamp (evidence snapshots, vet reports),
-    so only one file needs parsing."""
-    if not directory.is_dir():
-        return None
-    paths = list(directory.glob(f"*{suffix}"))
-    names = {p.name for p in paths}
-
-    def key(path: Path) -> tuple[str, int, str]:
-        index = _collision_index(path.name, names, suffix)
-        stem = path.stem
-        if index > 1:
-            stem = stem.rsplit("-", 1)[0]
-        return (stem, index, path.name)
-
-    return max(paths, key=key, default=None)
-
-
-def _write_new(
-    directory: Path, stem: str, content: str, suffix: str = YAML_SUFFIX
-) -> Path:
-    """Create ``<stem><suffix>`` exclusively, or ``<stem>-2<suffix>``, ``-3`` …
-    if taken."""
-    directory.mkdir(exist_ok=True)
-    n = 1
-    while True:
-        name = f"{stem}{suffix}" if n == 1 else f"{stem}-{n}{suffix}"
-        try:
-            with (directory / name).open("x", encoding="utf-8") as f:
-                f.write(content)
-        except FileExistsError:
-            n += 1
-            continue
-        return directory / name
-
-
-def _stamp(value: datetime) -> str:
-    return value.strftime("%Y%m%dT%H%M%SZ")
+    return validate(path, _read_frontmatter(path), model)
 
 
 def filter_entries(
@@ -356,7 +252,7 @@ class ChannelStore:
         if not path.is_file():
             msg = f"No channel with slug '{slug}'"
             raise ChannelNotFoundError(msg)
-        channel = _load_model(path, Channel)
+        channel = load_model(path, Channel)
         if channel.slug != slug:
             msg = (
                 f"{path}: slug '{channel.slug}' does not match its directory "
@@ -368,27 +264,27 @@ class ChannelStore:
     def reviews(self, slug: str) -> list[Review]:
         """Reviews of a channel in write order: by ``created_at``, then by the
         filename's collision suffix (base file first, then ``-2``, ``-3`` …)."""
-        return _load_records(
+        return load_records(
             self._channel_dir(slug) / REVIEWS_DIR, Review, lambda r: r.created_at
         )
 
     def evidence(self, slug: str) -> list[Evidence]:
         """Evidence snapshots of a channel in write order (by ``fetched_at``, same
         tie rule as reviews); the last one is the latest."""
-        return _load_records(
+        return load_records(
             self._channel_dir(slug) / EVIDENCE_DIR, Evidence, lambda e: e.fetched_at
         )
 
     def latest_evidence(self, slug: str) -> Evidence | None:
         """The newest snapshot, parsing only its file (picked by name: the stem
         is the snapshot's ``fetched_at``)."""
-        path = _latest_by_name(self._channel_dir(slug) / EVIDENCE_DIR)
-        return None if path is None else _load_model(path, Evidence)
+        path = latest_by_name(self._channel_dir(slug) / EVIDENCE_DIR)
+        return None if path is None else load_model(path, Evidence)
 
     def vets(self, slug: str) -> list[VetReport]:
         """Vet reports of a channel in write order (by ``vetted_at``, same tie rule
         as reviews); the last one is the latest."""
-        return _load_records(
+        return load_records(
             self._channel_dir(slug) / VET_DIR,
             VetReport,
             lambda v: v.vetted_at,
@@ -399,7 +295,7 @@ class ChannelStore:
     def latest_vet(self, slug: str) -> StoredVet | None:
         """The newest vet report and its path, parsing only its file (picked by
         name: the stem is the report's ``vetted_at``)."""
-        path = _latest_by_name(self._channel_dir(slug) / VET_DIR, MARKDOWN_SUFFIX)
+        path = latest_by_name(self._channel_dir(slug) / VET_DIR, MARKDOWN_SUFFIX)
         if path is None:
             return None
         return StoredVet(_load_frontmatter(path, VetReport), path)
@@ -413,7 +309,7 @@ class ChannelStore:
         )
 
     def entries(self) -> list[ChannelEntry]:
-        """Every channel. A broken file raises ``ChannelStoreError`` naming it:
+        """Every channel. A broken file raises ``StoreError`` naming it:
         files are the source of truth, so a broken one should be fixed, not hidden."""
         return [self.get(slug) for slug in self.slugs()]
 
@@ -445,7 +341,7 @@ class ChannelStore:
         path = channel_dir / CHANNEL_FILE
         try:
             with path.open("x", encoding="utf-8") as f:
-                f.write(_dump_yaml(channel.model_dump(mode="json")))
+                f.write(dump_yaml(channel.model_dump(mode="json")))
         except FileExistsError as e:  # another writer won the race
             msg = f"Channel already registered with slug '{channel.slug}'"
             raise ChannelExistsError(msg) from e
@@ -454,30 +350,30 @@ class ChannelStore:
     def add_review(self, slug: str, review: Review) -> Path:
         """Write a new review file for ``slug``; never overwrites. Returns its path."""
         self.get_channel(slug)  # raises ChannelNotFoundError
-        stem = f"{_stamp(review.created_at)}-{slugify(review.reviewer) or 'reviewer'}"
-        return _write_new(
+        stem = review_stem(review.created_at, review.reviewer)
+        return write_new(
             self._channel_dir(slug) / REVIEWS_DIR,
             stem,
-            _dump_yaml(review.model_dump(mode="json")),
+            dump_yaml(review.model_dump(mode="json")),
         )
 
     def add_evidence(self, slug: str, evidence: Evidence) -> Path:
         """Write a new evidence snapshot for ``slug``; never overwrites."""
         self.get_channel(slug)  # raises ChannelNotFoundError
-        return _write_new(
+        return write_new(
             self._channel_dir(slug) / EVIDENCE_DIR,
-            _stamp(evidence.fetched_at),
-            _dump_yaml(evidence.model_dump(mode="json")),
+            stamp(evidence.fetched_at),
+            dump_yaml(evidence.model_dump(mode="json")),
         )
 
     def add_vet(self, slug: str, report: VetReport, body: str) -> Path:
         """Write a new vet report (YAML frontmatter + markdown ``body``) for
         ``slug``; never overwrites. Returns its path."""
         self.get_channel(slug)  # raises ChannelNotFoundError
-        content = f"---\n{_dump_yaml(report.model_dump(mode='json'))}---\n\n{body}"
-        return _write_new(
+        content = f"---\n{dump_yaml(report.model_dump(mode='json'))}---\n\n{body}"
+        return write_new(
             self._channel_dir(slug) / VET_DIR,
-            _stamp(report.vetted_at),
+            stamp(report.vetted_at),
             content,
             MARKDOWN_SUFFIX,
         )
@@ -501,7 +397,7 @@ class ChannelStore:
                 msg = f"{slug}: channel id '{channel_id}' is already slug '{other}'"
                 raise ChannelExistsError(msg)
         path = self._channel_dir(slug) / CHANNEL_FILE
-        raw = _load_yaml(path)
+        raw = load_yaml(path)
         raw["channel_id"] = channel_id
         Channel.model_validate(raw)  # refuse to write a file that won't load
         fd, tmp_name = tempfile.mkstemp(
@@ -510,8 +406,8 @@ class ChannelStore:
         tmp = Path(tmp_name)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(_dump_yaml(raw))
-            current = _load_yaml(path).get("channel_id")
+                f.write(dump_yaml(raw))
+            current = load_yaml(path).get("channel_id")
             if current is not None:  # another writer got there first
                 if current == channel_id:
                     return False

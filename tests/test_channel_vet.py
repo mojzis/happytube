@@ -16,6 +16,7 @@ from happytube.channels.vet import (
     render_report,
     review_for,
 )
+from happytube.records import StoreError
 from happytube.rubric import FLAGS, is_suitable
 from tests.vet_helpers import (
     FETCHED_AT,
@@ -125,7 +126,7 @@ def test_reject_and_unsure_pass_through_flags(verdict):
 
 def test_prompt_leaves_out_shorts_and_keeps_czech():
     prompt = build_prompt(make_channel(), make_evidence(n_long=6, n_short=2))
-    assert "video_id: v5" in prompt.user
+    assert "video_id: v0000000005" in prompt.user
     assert "s0" not in prompt.user
     assert "shorts_left_out: 2" in prompt.user
     assert "Score all 6 long-form videos" in prompt.user
@@ -147,7 +148,11 @@ def test_prompt_is_deterministic_with_a_fixed_system_part():
 
 def test_report_scores_long_form_in_snapshot_order():
     report = _report(make_evidence(n_long=3, n_short=1, newest_days_ago=1))
-    assert [v.video_id for v in report.videos] == ["v0", "v1", "v2"]
+    assert [v.video_id for v in report.videos] == [
+        "v0000000000",
+        "v0000000001",
+        "v0000000002",
+    ]
     assert report.shorts_skipped == 1
     assert report.evidence_at == FETCHED_AT
     assert report.suitable_count == 3
@@ -156,8 +161,11 @@ def test_report_scores_long_form_in_snapshot_order():
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        (lambda videos: videos.pop(), "missing v5"),
-        (lambda videos: videos.append(videos[0].model_copy()), "scored twice v0"),
+        (lambda videos: videos.pop(), "missing v0000000005"),
+        (
+            lambda videos: videos.append(videos[0].model_copy()),
+            "scored twice v0000000000",
+        ),
         (
             lambda videos: videos.append(
                 videos[0].model_copy(update={"video_id": "s0"})
@@ -303,7 +311,7 @@ def test_unknown_key_in_vet_frontmatter_is_refused(store):
         path.read_text(encoding="utf-8").replace("---\n", "---\nextra: 1\n", 1),
         encoding="utf-8",
     )
-    with pytest.raises(ChannelStoreError, match="extra"):
+    with pytest.raises(StoreError, match="extra"):
         store.vets(channel.slug)
 
 
