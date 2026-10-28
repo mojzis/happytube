@@ -42,7 +42,8 @@ happytube --help                                       # or <command> --help
 ```
 
 Run via `uv run happytube …`. Daily automation: `./scripts/daily_run.sh` (cron-ready;
-legacy by default, `HAPPYTUBE_PIPELINE=trusted` runs `trusted run` instead).
+legacy by default, `HAPPYTUBE_PIPELINE=trusted` runs `trusted run` instead; runs in
+its own repo unless `HAPPYTUBE_DIR` is set).
 
 ### Trusted pipeline (decision 0009)
 
@@ -58,13 +59,19 @@ happytube trusted status  [--date D] [--json]                         # no keys
 non-approved one is an error), ~3 quota units each: uploads, `UUSH` Shorts, then
 `videos.list`. It keeps long-form, not live/upcoming videos published within
 `--since-days` of `--date` that were never fetched before on any date (a rerun
-writes nothing new). `assess` scores the date's new videos with the rubric, one
-Claude Opus 5.5 call per channel batch (≤ 25); `suitable` is `is_suitable` in code.
-`enhance` rewrites descriptions of suitable videos only, one call per video. Both
-skip videos already done unless `--force`, report tokens and estimated USD, and ask
-for the key only when there is something to send (`--dry-run` never). Fails loudly:
-quota / bad key / Anthropic key, permission or credit stops the run; any channel or
-batch failure exits ≠ 0; `run` stops at the first failing step. `--channels-dir`
+writes nothing new; a video id not matching `[A-Za-z0-9_-]{11}` is `unreadable`).
+`assess` scores every fetched video dated `--date` or earlier that has no assess file
+yet (so a failed day's leftovers are picked up later), one Claude Opus 5.5 call per
+channel batch (≤ 25), and writes each under its fetch file's date; `suitable` is
+`is_suitable` in code, and a video scored unsuitable loses its enhance file
+(`unenhanced`). `enhance` likewise takes every suitable assessed video without an
+enhance file, one call per video. `--force` redoes only `--date`'s videos. Both
+report tokens and estimated USD and ask for the key only when there is something to
+send (`--dry-run` never). Fails loudly: quota / bad key / Anthropic key, permission
+or credit stops the run; any channel or batch failure exits ≠ 0 after the others
+finish. `run` checks both keys before fetching, goes on into assess / enhance past
+per-channel or per-batch failures (exit ≠ 0 at the end) and stops the chain only on
+a stop. `--channels-dir`
 goes before the subcommand (`happytube trusted --channels-dir X fetch`). Files
 land in `stages/trusted/` under the current directory.
 
@@ -241,11 +248,12 @@ from the repo root.
 
 - `cli/commands.py` — click entry point `happytube`; `cli/channels.py` — the
   `channels` subgroup; `cli/trusted.py` — the `trusted` subgroup; `cli/serve.py` —
-  `happytube serve`.
+  `happytube serve`; `cli/common.py` — shared options (`--channels-dir`,
+  `--json`), output helpers, `make_youtube_client`.
 - `claude.py` — the shared Claude call (`MODEL` = Opus 5.5, effort, structured
-  output, refusal fallback, `ClaudeStoppingError` / `ClaudeCallError`,
+  output, refusal fallback, `ClaudeStoppingError` / `ClaudeCallError`, `Usage`,
   `estimate_usd`), used by `channels vet` and the trusted pipeline.
-- `trusted/` — `stages.py` (`TrustedStage`, `status_counts`), `fetch.py`
+- `trusted/` — `stages.py` (`TrustedStage`, `pending`, `is_video_id`, `status_counts`), `fetch.py`
   (`fetch_trusted`, `FetchRun`), `assess.py`, `enhance.py`, `runs.py` (`ItemRun`,
   `run_items`, `TrustedClient` protocol).
 - `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),

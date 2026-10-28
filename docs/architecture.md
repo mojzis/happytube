@@ -96,8 +96,10 @@ Planned:
 - **Daily (trusted, `HAPPYTUBE_PIPELINE=trusted scripts/daily_run.sh`):**
   `happytube trusted run` → fetch approved channels' new long-form videos (~3
   units per channel, skip any seen before) → assess per channel batch with the
-  rubric (Opus 5.5) → enhance suitable ones. Any failure stops the chain, exit ≠ 0;
-  rerun is idempotent.
+  rubric (Opus 5.5) → enhance suitable ones. Assess and enhance take everything
+  still pending up to the date, so a failed day's videos are picked up the next
+  day. A per-channel / per-batch failure exits ≠ 0 after the chain finishes; a
+  quota or key stop ends the chain; rerun is idempotent.
 - **Player:** `python -m happytube.web.server` locally, or
   `python -m happytube.web.export` → GitHub Pages.
 - **Evidence:** `channels resolve` (handle → channel id, once) → `channels evidence`

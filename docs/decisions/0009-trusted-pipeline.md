@@ -26,8 +26,19 @@ trusted sources and its fetch swallowed errors as "0 new videos". Phase 5 is spl
   units per channel. Kept: long-form, not live/upcoming, published within
   `--since-days` (default 14) of the date.
 - **Dedup:** a video id found anywhere under `stages/trusted/fetch/*/` is never
-  fetched again; reruns are idempotent. Assess and enhance likewise skip a video
-  done on any date unless `--force`.
+  fetched again; reruns are idempotent. Only ids matching `[A-Za-z0-9_-]{11}`
+  become files (others count as unreadable).
+- **Nothing stranded (fix after review R1):** assess takes every fetch file dated
+  `--date` or earlier that has no assess file (any date); enhance every
+  `suitable: true` assess file with no enhance file. Each output goes under the
+  **date of its fetch file**, so a date's fetch/assess/enhance dirs and `status`
+  stay coherent. A video done on any date is skipped; `--force` redoes only
+  `--date`'s videos. Without this, a per-channel error that stopped `run` left
+  other channels' videos of that day unassessed forever (the seen set blocks a
+  refetch and assess only read `--date`).
+- **Unsuitable means not enhanced:** when assess (e.g. `--force` after a rubric
+  change) scores a video unsuitable, its enhance file is deleted (`unenhanced` in
+  the result), so `stages/trusted/enhance/` only ever holds suitable videos.
 - **Assess:** Claude Opus 5.5 with the shared rubric (`rubric.RUBRIC`, versioned
   by `RUBRIC_VERSION`), one call per channel batch (≤ 25 videos), the same call
   shape as `channels vet` (`happytube.claude`: structured output, effort `medium`,
@@ -39,7 +50,9 @@ trusted sources and its fetch swallowed errors as "0 new videos". Phase 5 is spl
 - **Fail loudly.** A used-up YouTube quota or rejected key, or an Anthropic
   key / permission / credit problem, stops the run (files written stay, the rest
   are `not_fetched` / `not_run`); any per-channel or per-batch failure exits
-  non-zero after the others finish; `run` stops at the first failing step. Zero
+  non-zero after the others finish. `run` checks both keys before fetching; it
+  goes on into assess and enhance past per-channel and per-batch failures (exit
+  non-zero at the end) and stops the chain only on a stop. Zero
   new videos without errors is a normal exit 0. The legacy fetch's catch-all now
   fails the run too.
 
@@ -51,4 +64,6 @@ trusted sources and its fetch swallowed errors as "0 new videos". Phase 5 is spl
   which rubric version and model, for 5c's spot-checks to measure.
 - Scores are taken once and kept; run-to-run variance is not averaged out.
 - Rubric or prompt changes don't re-score old videos unless `--force` per date.
+- A day's assess/enhance files may be written by a later day's run (the leftover
+  of a failure); `assessed_at` / `enhanced_at` say when.
 - Two pipelines to keep working until the legacy one is retired.
