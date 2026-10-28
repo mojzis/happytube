@@ -76,3 +76,21 @@ class YouTubeSettings(BaseSettings):
     youtube_api_key: SecretStr = Field(
         ..., alias="YTKEY", min_length=1, description="YouTube Data API key"
     )
+
+
+class AnthropicSettings(BaseSettings):
+    """Only the Anthropic key, for ``channels vet`` (no YouTube key needed).
+
+    Reads the same ``.env`` as ``Settings``; other keys in it are ignored.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    anthropic_api_key: SecretStr = Field(
+        ..., alias="ANTHROPIC_API_KEY", min_length=1, description="Anthropic API key"
+    )
