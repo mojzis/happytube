@@ -12,7 +12,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from happytube.models.markdown import MarkdownFile
 from happytube.stages.base import Stage
-from happytube.utils import first_text, utc_now_iso
+from happytube.stages.claude_response import first_text
+from happytube.utils import utc_now_iso
 
 console = Console()
 
