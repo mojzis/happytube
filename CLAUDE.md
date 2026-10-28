@@ -5,10 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 HappyTube finds calm, happy YouTube videos for vulnerable viewers (first audience: a
-grandmother with early dementia). Today it fetches videos from the YouTube Data API,
-scores happiness with Claude, improves descriptions of the happy ones and plays them
-in a recommendation-free player. Next it moves to a human-approved allowlist of
-trusted channels (see Project plan).
+grandmother with early dementia). The trusted pipeline (`happytube trusted`) fetches
+new videos only from human-approved channels, scores each with the calm/happy rubric
+(Claude) and cleans the descriptions of the suitable ones. The legacy pipeline
+(search by category, happiness 1–5) still runs side by side; the player still reads
+legacy data until phase 5b (see Project plan).
 
 ## Project plan
 
@@ -28,7 +29,7 @@ trusted channels (see Project plan).
 CI (`.github/workflows/ci.yml`) runs format, lint, ty, zorilla, biston and pytest on
 every PR and push to `main`; pysentry is advisory.
 
-### HappyTube CLI
+### HappyTube CLI (legacy pipeline)
 
 ```bash
 happytube run-all --category Music --max-videos 50     # full pipeline
@@ -40,7 +41,32 @@ happytube status --date 2025-11-16
 happytube --help                                       # or <command> --help
 ```
 
-Run via `uv run happytube …`. Daily automation: `./scripts/daily_run.sh` (cron-ready).
+Run via `uv run happytube …`. Daily automation: `./scripts/daily_run.sh` (cron-ready;
+legacy by default, `HAPPYTUBE_PIPELINE=trusted` runs `trusted run` instead).
+
+### Trusted pipeline (decision 0009)
+
+```bash
+happytube trusted fetch   [SLUG…] [--date D] [--since-days 14] [--max-per-channel 50] [--json]  # YTKEY
+happytube trusted assess  [--date D] [--force] [--dry-run] [--json]   # ANTHROPIC_API_KEY
+happytube trusted enhance [--date D] [--force] [--dry-run] [--json]   # ANTHROPIC_API_KEY
+happytube trusted run     [--date D] [--since-days 14] [--max-per-channel 50] [--json]  # both
+happytube trusted status  [--date D] [--json]                         # no keys
+```
+
+`fetch` reads only **approved** channels (all, or the named SLUGs — a named
+non-approved one is an error), ~3 quota units each: uploads, `UUSH` Shorts, then
+`videos.list`. It keeps long-form, not live/upcoming videos published within
+`--since-days` of `--date` that were never fetched before on any date (a rerun
+writes nothing new). `assess` scores the date's new videos with the rubric, one
+Claude Opus 5.5 call per channel batch (≤ 25); `suitable` is `is_suitable` in code.
+`enhance` rewrites descriptions of suitable videos only, one call per video. Both
+skip videos already done unless `--force`, report tokens and estimated USD, and ask
+for the key only when there is something to send (`--dry-run` never). Fails loudly:
+quota / bad key / Anthropic key, permission or credit stops the run; any channel or
+batch failure exits ≠ 0; `run` stops at the first failing step. `--channels-dir`
+goes before the subcommand (`happytube trusted --channels-dir X fetch`). Files
+land in `stages/trusted/` under the current directory.
 
 ### Channel registry
 
@@ -71,7 +97,7 @@ default `channels/` at the repo root. Status is derived: the latest *human*
 approve/reject decides; agent reviews never change it; `rejected` is the blocklist
 (decision 0003).
 
-`vet` (decision 0005) is the only command calling Claude; it needs only
+`vet` (decision 0005) is the only `channels` command calling Claude; it needs only
 `ANTHROPIC_API_KEY` (`--dry-run` needs none and writes nothing). Claude Opus 5.5
 judges the latest snapshot — identity, plus calm/happy per long-form video (Shorts
 are never scored) — and `vet` writes `vet/<stamp>.md` and an agent review
@@ -187,7 +213,7 @@ published minutes ago.
 
 ## Architecture
 
-### Stage-based pipeline
+### Stage-based pipeline (legacy)
 
 ```
 Stage 1: FETCH    → stages/fetch/YYYY-MM-DD/*.md
@@ -214,7 +240,14 @@ from the repo root.
 ### Key modules
 
 - `cli/commands.py` — click entry point `happytube`; `cli/channels.py` — the
-  `channels` subgroup; `cli/serve.py` — `happytube serve`.
+  `channels` subgroup; `cli/trusted.py` — the `trusted` subgroup; `cli/serve.py` —
+  `happytube serve`.
+- `claude.py` — the shared Claude call (`MODEL` = Opus 5.5, effort, structured
+  output, refusal fallback, `ClaudeStoppingError` / `ClaudeCallError`,
+  `estimate_usd`), used by `channels vet` and the trusted pipeline.
+- `trusted/` — `stages.py` (`TrustedStage`, `status_counts`), `fetch.py`
+  (`fetch_trusted`, `FetchRun`), `assess.py`, `enhance.py`, `runs.py` (`ItemRun`,
+  `run_items`, `TrustedClient` protocol).
 - `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),
   `store.py` (`ChannelStore`, `derive_status`), `evidence.py` (pure API → `Evidence`
   builder, Shorts by `UUSH` ids or duration), `collect.py` (resolve / evidence
@@ -225,8 +258,8 @@ from the repo root.
   factory, routes, Host/Origin guard), `queue.py` (pure `queue_sections` sort),
   `templates/`, `static/` (vendored htmx, `review.css`); reads and writes only
   through `ChannelStore`.
-- `rubric.py` — calm/happy rubric, video flags, `VideoScore`, `is_suitable`; shared
-  by channel vetting and (phase 5) video assessment.
+- `rubric.py` — calm/happy rubric (`RUBRIC_VERSION`), video flags, `VideoScore`,
+  `is_suitable`, `id_mismatch`; shared by channel vetting and trusted assess.
 - `youtube.py` — `YouTubeClient` (injectable getter, quota count, key-free errors,
   `QuotaExceededError` / `InvalidKeyError`); `videos.py` — legacy search for fetch.
 - `config/settings.py` (pydantic settings from `.env`), `config/config_manager.py`
@@ -237,9 +270,13 @@ from the repo root.
 
 ### Storage Structure
 ```
-# Stage-based data (new architecture)
+# Stage-based data
 stages/
-├── fetch/              # Fetched videos
+├── trusted/            # trusted pipeline (decision 0009), <video_id>.md per video
+│   ├── fetch/YYYY-MM-DD/      # new long-form videos of approved channels
+│   ├── assess/YYYY-MM-DD/     # + calm, happy, flags, note, suitable, rubric_version
+│   └── enhance/YYYY-MM-DD/    # suitable only, + enhanced_description
+├── fetch/              # legacy: fetched videos
 │   └── YYYY-MM-DD/
 │       ├── video_abc123.md
 │       └── video_def456.md

@@ -1,8 +1,12 @@
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
+set -o pipefail  # "cmd | tee" fails when cmd fails, not only when tee does
 
 # Configuration
 HAPPYTUBE_DIR="/home/user/happytube"
+# Which pipeline to run: "legacy" (YouTube search + happiness, the default) or
+# "trusted" (approved channels + rubric, decision 0009).
+PIPELINE="${HAPPYTUBE_PIPELINE:-legacy}"
 LOG_DIR="$HAPPYTUBE_DIR/logs"
 DATE=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
@@ -34,6 +38,20 @@ if [ -d ".venv" ]; then
 elif [ -d "venv" ]; then
     log "Activating virtual environment..."
     source venv/bin/activate
+fi
+
+if [ "$PIPELINE" = "trusted" ]; then
+    log "Running the trusted pipeline (fetch, assess, enhance)..."
+    if uv run happytube trusted run --date "$DATE" 2>&1 | tee -a "$LOG_FILE"; then
+        uv run happytube trusted status --date "$DATE" 2>&1 | tee -a "$LOG_FILE"
+        log "Trusted pipeline completed successfully"
+        exit 0
+    fi
+    log "ERROR: Trusted pipeline failed! See $LOG_FILE (rerunning is safe)"
+    exit 1
+elif [ "$PIPELINE" != "legacy" ]; then
+    log "ERROR: unknown HAPPYTUBE_PIPELINE '$PIPELINE' (use legacy or trusted)"
+    exit 2
 fi
 
 # Run full pipeline
