@@ -26,7 +26,7 @@ Then the existing pipeline fetches only from approved channels.
 | # | Title | Deliverable |
 | --- | --- | --- |
 | 0 ✅ | Template alignment | Repo matches `~/git/python-template` (src layout, uv dev group, ruff/ty, poe tasks, madoqua hook, aesop toolbox, dependabot); legacy modules deleted; `docs/` scaffold from ideas repo template with decision 0001 = trusted channels. |
-| 1 | Channel registry | Data model + files for channels (`candidate` / `approved` / `rejected`, kind, language, ids) and review records (reviewer, role human/agent, verdict, notes, timestamp). CLI: `channels add / list / show / review` with `--json`. Seed with the starter candidates from the idea doc. |
+| 1 ✅ | Channel registry | Data model + files for channels (`candidate` / `approved` / `rejected`, kind, language, ids) and review records (reviewer, role human/agent, verdict, notes, timestamp). CLI: `channels add / list / show / review` with `--json`. Seed with the starter candidates from the idea doc. |
 | 2 | Channel evidence | Resolve handles → channel ids (`channels.list`), collect stats + recent uploads (RSS and/or `playlistItems`), video durations; cached per channel. Research note + decision record comparing fetch methods with quota math for 50/200/500 channels. |
 | 3 | Agent vetting | Claude vets a channel from its evidence with the calm/happy rubric → markdown vet report + an agent review record. Video-level assessment reuses the same rubric. CLI: `channels vet <id>`. |
 | 4 | Web review UI | Flask pages: channel queue, channel detail (evidence, agent reports, all reviews), approve/reject/notes form writing the same review records; video review queue. |
@@ -62,3 +62,12 @@ branch; merge/PR only after the user says so.
   still pins the implementation, duplicated CLI test setup.
 - Coverage 45% (web/ and stages largely untested).
 - Paths are relative to cwd; add a `data_root` setting.
+
+## Backlog (from phase 1, not scheduled)
+
+- V1: a channel directory whose name is not a valid slug makes `channels list` fail
+  with a "not found" message and no path; raise a store error naming the path.
+- V2: ValidationError formatting duplicated in `channels/store.py` and
+  `cli/channels.py`; share one helper.
+- `channels list` table truncates kind/name at 80 columns without a TTY.
+- Seed handles: only `@bbcearth`, `@NatGeo` set; phase 2 resolves the rest.

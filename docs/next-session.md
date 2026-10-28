@@ -6,29 +6,40 @@ _Updated 2026-10-28._
 
 - Plan: `docs/plan.md` (phases 0–5 + backlog). Source idea:
   `~/git/ideas/projects/happytube/ideas/trusted-channels.md`.
-- **Phase 0 done** on branch `phase-0-template` (not pushed, no PR yet): src layout,
-  template tooling (uv dev group, ruff/ty, poe, madoqua hook, aesop toolbox,
-  dependabot), legacy + queue experiments deleted, docs scaffold
-  (constitution, architecture, decisions 0001/0002), YTKEY bug fixed, vulns 21 → 0,
-  46 tests. Record: `docs/phases/phase-0/` (log.md has every agent report).
-- Process lessons for the future runner skill: `docs/process-learnings.md`.
+- Phase 0 merged to `main` (PR #6).
+- **Phase 1 done** on branch `phase-1-channels` (not pushed, no PR yet):
+  `happytube.channels` package (`Channel`/`Review` models, `ChannelStore`,
+  `derive_status`, `filter_entries`), `happytube channels add/list/show/review`
+  with `--json`, no API keys needed. 15 seed candidates in `channels/`
+  (only `@bbcearth`, `@NatGeo` have handles; no channel ids). Decision 0003 (layout).
+  Tests 46 → 122, `poe check` green, coverage 59%.
+  Record: `docs/phases/phase-1/` (log.md has every agent report, learnings.md).
+- Process lessons (cumulative): `docs/process-learnings.md`.
 
 ## Next step
 
-1. Start **phase 1 — channel registry**: write `docs/phases/phase-1/context.md`
-   (data model for channels + review records, file layout, CLI `channels
-   add/list/show/review --json`, seed list from the idea doc), then run the loop.
+1. User: review + merge phase 1 (push `phase-1-channels`, open PR).
+2. Start **phase 2 — channel evidence**: write `docs/phases/phase-2/context.md`, then
+   run the loop (same as phase 1; see learnings for brief tweaks: `--detach`
+   worktrees, split review/QA scope, verify judges every fix deviation).
+   Phase 2 scope (from plan): resolve handles → channel ids (`channels.list`
+   `forHandle`), stats + recent uploads (RSS vs `playlistItems`), video durations
+   (Shorts), cached per channel under `channels/<slug>/evidence/`; research note +
+   decision record comparing fetch methods with quota math for 50/200/500 channels.
 
-## Decided (2026-10-28)
+## Open decisions (settle in phase 2 context.md)
 
-- Phase 0 merged to `main` (PR from `phase-0-template`).
-- Runner: manual for now — the user drives the loop from the session, same steps as
-  phase 0 (`docs/plan.md` → Per-phase loop). No runner skill yet.
-- Phase 1 layout: **one file per channel** (merge-friendly; people and agents write
-  concurrently).
+- Needs a real `YTKEY` for the resolve/evidence run (no `.env` in the repo now):
+  user provides one, or phase 2 builds + tests with mocks and the user runs it.
+- Evidence format: YAML snapshot per fetch (timestamped, append-only like reviews)
+  vs one overwritten `evidence.yaml` (git history keeps old ones).
+- Seed handles for the 13 unresolved channels: agent proposes via search
+  (100 units each) or the user fills them by hand.
+- Allowlist vs blocklist: closed — `rejected` channel = blocklist (decision 0003).
 
-## Open decisions
+## Decided
 
-- Phase 1: exact per-channel file shape (YAML with embedded review list vs. channel
-  YAML + separate review files) — settle in phase 1 context.md.
-- Allowlist only, or also blocklist (idea doc open question).
+- Runner: manual; the user drives the loop from the session (`docs/plan.md` →
+  Per-phase loop). No runner skill yet.
+- Registry layout (decision 0003): `channels/<slug>/channel.yaml` +
+  append-only `reviews/`; status derived from latest human approve/reject.
