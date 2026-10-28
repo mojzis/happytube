@@ -4,11 +4,15 @@ One Claude call per channel batch (up to ``BATCH_SIZE`` videos), so the model
 sees one channel's context. The model returns a ``VideoScore`` per video;
 ``suitable`` is decided here with ``rubric.is_suitable``, never by the model.
 A reply that doesn't score every video sent exactly once writes nothing for
-its batch. A video already assessed (any date) is not re-scored unless
-``force``, which re-scores the date's videos and overwrites their files.
+its batch. Every fetched video not yet assessed, on any date up to the target,
+is picked up (a video left over by a failed run is not stranded) and written
+under its fetch file's date; one already assessed is not re-scored unless
+``force``, which re-scores the target date's videos. A video scored unsuitable
+loses any enhance file it had.
 """
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import date
 from itertools import batched
 from pathlib import Path
@@ -32,7 +36,7 @@ from happytube.trusted.runs import (
     TrustedClient,
     run_items,
 )
-from happytube.trusted.stages import TrustedStage
+from happytube.trusted.stages import Dated, TrustedStage, pending, video_id_of
 from happytube.utils import utc_now_iso
 
 BATCH_SIZE = 25
@@ -101,26 +105,33 @@ def build_prompt(videos: list[MarkdownFile]) -> Prompt:
 
 
 def _batches(
-    videos: list[MarkdownFile],
-) -> Iterator[tuple[ItemResult, list[MarkdownFile]]]:
+    videos: list[Dated],
+) -> Iterator[tuple[ItemResult, list[Dated]]]:
     """Per channel (in slug order), chunks of up to ``BATCH_SIZE`` videos."""
-    by_channel: dict[str, list[MarkdownFile]] = {}
-    for md in videos:
-        by_channel.setdefault(str(md.frontmatter.get("channel_slug")), []).append(md)
+    by_channel: dict[str, list[Dated]] = {}
+    for day, md in videos:
+        slug = str(md.frontmatter.get("channel_slug"))
+        by_channel.setdefault(slug, []).append((day, md))
     for slug in sorted(by_channel):
         for chunk in batched(by_channel[slug], BATCH_SIZE):
-            ids = [str(md.frontmatter["video_id"]) for md in chunk]
+            ids = [video_id_of(md) for _, md in chunk]
             yield ItemResult(slug, ids), list(chunk)
+
+
+@dataclass(frozen=True)
+class _Stages:
+    assess: TrustedStage
+    enhance: TrustedStage
 
 
 def _assess_batch(
     client: TrustedClient,
     result: ItemResult,
-    videos: list[MarkdownFile],
-    target_date: date,
-    stage: TrustedStage,
+    videos: list[Dated],
+    stages: _Stages,
 ) -> None:
-    output = result.record(client.call(build_prompt(videos), AssessOutput))
+    prompt = build_prompt([md for _, md in videos])
+    output = result.record(client.call(prompt, AssessOutput))
     if output is None:
         return
     problem = id_mismatch(result.video_ids, [s.video_id for s in output.videos])
@@ -130,8 +141,8 @@ def _assess_batch(
     scores = {s.video_id: s for s in output.videos}
     assessed_at = utc_now_iso()
     result.suitable = 0
-    for md in videos:
-        score = scores[str(md.frontmatter["video_id"])]
+    for day, md in videos:
+        score = scores[video_id_of(md)]
         suitable = is_suitable(score.calm, score.happy, score.flags)
         result.suitable += suitable
         frontmatter = {
@@ -146,10 +157,14 @@ def _assess_batch(
             "rubric_version": RUBRIC_VERSION,
             "stage": "trusted_assess",
         }
-        path = stage.write(
-            target_date, score.video_id, MarkdownFile(frontmatter, md.content)
+        # Written under the fetch file's date, so each date's stages line up.
+        path = stages.assess.write(
+            day, score.video_id, MarkdownFile(frontmatter, md.content)
         )
         result.paths.append(str(path))
+        if not suitable:  # no longer shown: drop an earlier enhanced version
+            removed = stages.enhance.remove(score.video_id)
+            result.unenhanced.extend(str(p) for p in removed)
     result.status = "done"
 
 
@@ -160,16 +175,21 @@ def assess_trusted(
     force: bool = False,
     base_path: Path = Path("stages"),
 ) -> ItemRun:
-    """Assess the date's fetched videos; ``make_client=None`` is a dry run."""
-    stage = TrustedStage("assess", base_path)
-    videos = TrustedStage("fetch", base_path).load(target_date)
-    done = set() if force else stage.video_ids()
-    todo = [md for md in videos if str(md.frontmatter["video_id"]) not in done]
+    """Assess every fetched video (dated ``target_date`` or earlier) not yet
+    assessed; ``force`` re-scores the date's videos. ``make_client=None`` is a
+    dry run. A video that turns out unsuitable loses its enhance file."""
+    stages = _Stages(
+        TrustedStage("assess", base_path), TrustedStage("enhance", base_path)
+    )
+    todo, skipped = pending(
+        TrustedStage("fetch", base_path).load_until(target_date),
+        stages.assess.video_ids(),
+        target_date,
+        force=force,
+    )
     return run_items(
         _batches(todo),
         make_client,
-        lambda client, result, chunk: _assess_batch(
-            client, result, chunk, target_date, stage
-        ),
-        skipped=len(videos) - len(todo),
+        lambda client, result, chunk: _assess_batch(client, result, chunk, stages),
+        skipped=skipped,
     )

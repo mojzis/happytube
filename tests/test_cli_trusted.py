@@ -40,12 +40,16 @@ def store(tmp_path, monkeypatch):
 def youtube(monkeypatch):
     fake = FakeYouTube()
     fake.uploads = {
-        "UCzoo": [video("z1"), video("z2", "PT45S"), video("z3")],
-        "UCearth": [video("e1", "PT1H")],
-        "UCmaybe": [video("m1")],
-        "UCbad": [video("b1")],
+        "UCzoo": [
+            video("zoo-video-1"),
+            video("zoo-video-2", "PT45S"),
+            video("zoo-video-3"),
+        ],
+        "UCearth": [video("earth-vid-1", "PT1H")],
+        "UCmaybe": [video("maybe-vid-1")],
+        "UCbad": [video("bad-video-1")],
     }
-    fake.shorts = {"UCzoo": ["z2"]}
+    fake.shorts = {"UCzoo": ["zoo-video-2"]}
     monkeypatch.setattr(
         trusted_cli, "make_youtube_client", lambda: YouTubeClient(FAKE_KEY, get=fake)
     )
@@ -87,7 +91,7 @@ def test_fetch_writes_only_approved_long_form_videos(store, youtube):
     assert result.exit_code == 0, result.stderr
     data = _json(result)
     assert sorted(_by_slug(data)) == ["earth", "zoo"]  # no candidate, no rejected
-    assert _ids("fetch") == ["e1", "z1", "z3"]
+    assert _ids("fetch") == ["earth-vid-1", "zoo-video-1", "zoo-video-3"]
     zoo = _by_slug(data)["zoo"]
     assert (zoo["new"], zoo["shorts"], zoo["shorts_source"]) == (2, 1, "uush")
     assert data["quota_units"] == 6  # uploads, UUSH, videos per channel
@@ -95,11 +99,11 @@ def test_fetch_writes_only_approved_long_form_videos(store, youtube):
 
 def test_fetch_file_has_the_frontmatter_and_full_description(store, youtube):
     long_text = "Žirafa. " * 200
-    youtube.uploads["UCearth"] = [video("e1", desc=long_text)]
+    youtube.uploads["UCearth"] = [video("earth-vid-1", desc=long_text)]
     _run("fetch", "--date", TARGET)
-    md = MarkdownFile.load(_stage_dir("fetch") / "e1.md")
+    md = MarkdownFile.load(_stage_dir("fetch") / "earth-vid-1.md")
     assert md.frontmatter == md.frontmatter | {
-        "video_id": "e1",
+        "video_id": "earth-vid-1",
         "channel_slug": "earth",
         "channel_id": "UCearth",
         "channel_name": "Earth",
@@ -109,7 +113,7 @@ def test_fetch_file_has_the_frontmatter_and_full_description(store, youtube):
         "shorts_source": "uush",  # no UUSH playlist (404): no Shorts
         "stage": "trusted_fetch",
     }
-    assert md.content == f"# Video e1\n\n{long_text.strip()}"
+    assert md.content == f"# Video earth-vid-1\n\n{long_text.strip()}"
 
 
 def test_shorts_by_duration_when_uush_unreadable(store, youtube):
@@ -117,21 +121,21 @@ def test_shorts_by_duration_when_uush_unreadable(store, youtube):
     data = _json(_run("fetch", "zoo", "--date", TARGET, "--json"))
     zoo = _by_slug(data)["zoo"]
     assert (zoo["shorts"], zoo["shorts_source"]) == (1, "duration")
-    assert _ids("fetch") == ["z1", "z3"]
+    assert _ids("fetch") == ["zoo-video-1", "zoo-video-3"]
 
 
 def test_window_live_and_upcoming_are_left_out(store, youtube):
     youtube.uploads["UCearth"] = [
-        video("old", published="2026-10-13T10:00:00Z"),  # 15 days back
-        video("edge", published="2026-10-14T10:00:00Z"),  # 14 days back
-        video("future", published="2026-10-29T10:00:00Z"),
-        video("live", "P0D", live="live"),
-        video("soon", "P0D", live="upcoming"),
+        video("old-video-1", published="2026-10-13T10:00:00Z"),  # 15 days back
+        video("edge-video1", published="2026-10-14T10:00:00Z"),  # 14 days back
+        video("future-vid1", published="2026-10-29T10:00:00Z"),
+        video("live-video1", "P0D", live="live"),
+        video("soon-video1", "P0D", live="upcoming"),
     ]
     data = _json(_run("fetch", "earth", "--date", TARGET, "--json"))
     earth = _by_slug(data)["earth"]
     assert (earth["outside_window"], earth["live"], earth["new"]) == (2, 2, 1)
-    assert _ids("fetch") == ["edge"]
+    assert _ids("fetch") == ["edge-video1"]
     narrow = _json(
         _run("fetch", "zoo", "--date", TARGET, "--since-days", "2", "--json")
     )
@@ -149,10 +153,12 @@ def test_rerun_same_date_is_idempotent(store, youtube):
 
 def test_later_date_skips_videos_seen_on_earlier_dates(store, youtube):
     _run("fetch", "--date", TARGET)
-    youtube.uploads["UCzoo"].insert(0, video("z0", published="2026-10-29T08:00:00Z"))
+    youtube.uploads["UCzoo"].insert(
+        0, video("zoo-video-0", published="2026-10-29T08:00:00Z")
+    )
     later = _json(_run("fetch", "--date", "2026-10-29", "--json"))
     written = sorted(p.stem for p in _stage_dir("fetch", "2026-10-29").glob("*.md"))
-    assert (later["new"], written) == (1, ["z0"])
+    assert (later["new"], written) == (1, ["zoo-video-0"])
 
 
 def test_named_channel_must_be_approved(store, youtube):
@@ -180,7 +186,7 @@ def test_quota_stop_keeps_files_and_fails(store, youtube):
         ["fetched", "error"],
     )
     assert data["aborted"].startswith("YouTube playlistItems request failed: 403")
-    assert _ids("fetch") == ["e1"]
+    assert _ids("fetch") == ["earth-vid-1"]
 
 
 def test_quota_stop_message_is_on_stderr_without_the_key(store, youtube):
@@ -193,7 +199,10 @@ def test_quota_stop_message_is_on_stderr_without_the_key(store, youtube):
 def test_quota_stop_lists_unreached_channels_as_not_fetched(store, youtube):
     youtube.quota = 0
     data = _json(_run("fetch", "--date", TARGET, "--json"))
-    assert [r["status"] for r in data["results"]] == ["error", "not_fetched"]
+    assert [(r["status"], r["channel_id"]) for r in data["results"]] == [
+        ("error", "UCearth"),
+        ("not_fetched", "UCzoo"),
+    ]
 
 
 def test_channel_error_fails_the_run_but_others_are_written(store, youtube):
@@ -202,7 +211,7 @@ def test_channel_error_fails_the_run_but_others_are_written(store, youtube):
     assert result.exit_code == 1
     assert "earth: error — YouTube playlistItems request failed: 500" in result.stdout
     assert "Some items failed; see the report above" in result.stderr
-    assert _ids("fetch") == ["z1", "z3"]
+    assert _ids("fetch") == ["zoo-video-1", "zoo-video-3"]
 
 
 def test_channel_with_no_uploads_is_zero_new(store, youtube):
@@ -210,6 +219,23 @@ def test_channel_with_no_uploads_is_zero_new(store, youtube):
     result = _run("fetch", "earth", "--date", TARGET, "--json")
     assert result.exit_code == 0
     assert _json(result)["new"] == 0
+
+
+def test_unknown_slug_is_reported_before_the_missing_key(store):
+    result = _run("fetch", "nope", "--date", TARGET)
+    assert result.exit_code == 1
+    assert "nope" in result.stderr
+    assert "YTKEY" not in result.stderr
+
+
+def test_video_with_a_bad_id_is_unreadable_not_written(store, youtube):
+    youtube.uploads["UCearth"] = [video("../../evil1"), video("earth-vid-1")]
+    data = _json(_run("fetch", "earth", "--date", TARGET, "--json"))
+    assert (_by_slug(data)["earth"]["unreadable"], _ids("fetch")) == (
+        1,
+        ["earth-vid-1"],
+    )
+    assert not list(Path("stages").rglob("evil1*"))
 
 
 def test_fetch_needs_ytkey(store):
@@ -254,14 +280,17 @@ def test_assess_without_key_is_a_clean_error(store, youtube):
 
 
 def test_assess_then_enhance_report_tokens_and_cost(store, youtube, claude):
-    claude.scores = {"z3": (3, 4, [])}
+    claude.scores = {"zoo-video-3": (3, 4, [])}
     _run("fetch", "--date", TARGET)
     assess = _run("assess", "--date", TARGET)
     assert assess.exit_code == 0, assess.stderr
     assert "zoo: done 2 video(s), 1 suitable (claude-opus-5-5)" in assess.stdout
     assert "tokens: 2000 in, 400 out, est. $0.02" in assess.stdout
     enhance = _json(_run("enhance", "--date", TARGET, "--json"))
-    assert [r["video_ids"] for r in enhance["results"]] == [["e1"], ["z1"]]
+    assert [r["video_ids"] for r in enhance["results"]] == [
+        ["earth-vid-1"],
+        ["zoo-video-1"],
+    ]
     assert (enhance["input_tokens"], enhance["usd"]) == (2000, 0.016)
 
 
@@ -295,28 +324,80 @@ def test_run_chains_fetch_assess_enhance(store, youtube, claude):
     }
 
 
-def test_run_stops_when_fetch_fails(store, youtube, claude):
+def test_run_goes_on_past_a_channel_error(store, youtube, claude):
     youtube.broken.add("UUearth")
+    result = _run("run", "--date", TARGET, "--json")
+    assert result.exit_code == 1
+    data = _json(result)
+    assert [r["video_ids"] for r in data["assess"]["results"]] == [
+        ["zoo-video-1", "zoo-video-3"]
+    ]
+    assert _ids("enhance") == ["zoo-video-1", "zoo-video-3"]
+    assert "Some items failed in fetch; see the JSON on stdout" in result.stderr
+
+
+def test_video_left_by_a_failed_day_is_assessed_the_next_day(store, youtube, claude):
+    youtube.broken.add("UUearth")
+    _run("fetch", "--date", TARGET)  # zoo written, earth failed: exit 1
+    youtube.broken.clear()
+    result = _run("run", "--date", "2026-10-29", "--json")
+    assert result.exit_code == 0, result.stderr
+    assessed = _json(result)["assess"]["results"]
+    assert sorted(i for r in assessed for i in r["video_ids"]) == [
+        "earth-vid-1",
+        "zoo-video-1",
+        "zoo-video-3",
+    ]
+    # zoo's videos land under the date they were fetched on
+    assert _ids("assess") == _ids("enhance") == ["zoo-video-1", "zoo-video-3"]
+    assert _json(_run("status", "--date", TARGET, "--json"))["totals"] == {
+        "fetched": 2,
+        "assessed": 2,
+        "suitable": 2,
+        "enhanced": 2,
+    }
+
+
+def test_run_stops_on_a_quota_stop(store, youtube, claude):
+    youtube.quota = 0
     result = _run("run", "--date", TARGET, "--json")
     assert result.exit_code == 1
     data = _json(result)
     assert (data["assess"], data["enhance"]) == (None, None)
     assert claude.prompts == []
-    assert "fetch failed, chain stopped" in result.stderr
+    assert "fetch stopped, chain stopped. Stopped early:" in result.stderr
 
 
-def test_run_stops_when_assess_fails(store, youtube, monkeypatch):
+def test_run_stops_on_an_anthropic_stop(store, youtube, monkeypatch):
+    fake = FakeClaude(errors={0: ClaudeStoppingError("Anthropic API 402 no credit")})
+    monkeypatch.setattr(trusted_cli, "make_claude_caller", lambda: fake)
+    result = _run("run", "--date", TARGET, "--json")
+    assert result.exit_code == 1
+    assert _json(result)["enhance"] is None
+    assert "assess stopped, chain stopped" in result.stderr
+    assert not _stage_dir("enhance").exists()
+
+
+def test_run_goes_on_past_a_failed_batch(store, youtube, monkeypatch):
     fake = FakeClaude(errors={0: ClaudeCallError("Anthropic API 529 busy")})
     monkeypatch.setattr(trusted_cli, "make_claude_caller", lambda: fake)
     result = _run("run", "--date", TARGET)
     assert result.exit_code == 1
     assert "assess: earth: error 1 video(s) — Anthropic API 529 busy" in result.stdout
-    assert "assess failed, chain stopped" in result.stderr
-    assert not _stage_dir("enhance").exists()
+    assert "Some items failed in assess; see the report above" in result.stderr
+    assert _ids("enhance") == ["zoo-video-1", "zoo-video-3"]
+
+
+def test_run_without_anthropic_key_fetches_nothing(store, youtube):
+    result = _run("run", "--date", TARGET, "--json")
+    assert result.exit_code == 1
+    assert "ANTHROPIC_API_KEY is not set" in result.stderr
+    assert (youtube.calls, result.stdout) == ([], "")
+    assert not Path("stages").exists()
 
 
 def test_status_counts_per_channel(store, youtube, claude):
-    claude.scores = {"z1": (5, 4, ["war"])}
+    claude.scores = {"zoo-video-1": (5, 4, ["war"])}
     _run("run", "--date", TARGET)
     text = _run("status", "--date", TARGET).stdout
     assert "zoo: fetched 2, assessed 2, suitable 1, enhanced 1" in text

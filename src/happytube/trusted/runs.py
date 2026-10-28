@@ -44,6 +44,8 @@ class ItemResult:
     message: str | None = None
     suitable: int | None = None  # assess: how many of the batch are suitable
     paths: list[str] = field(default_factory=list)
+    # assess: enhance files deleted because the video is no longer suitable
+    unenhanced: list[str] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
 

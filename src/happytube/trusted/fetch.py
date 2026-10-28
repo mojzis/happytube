@@ -23,7 +23,7 @@ from happytube.channels.evidence import (
 from happytube.channels.models import Channel, EvidenceVideo
 from happytube.channels.store import ChannelStore, ChannelStoreError
 from happytube.models.markdown import MarkdownFile
-from happytube.trusted.stages import TrustedStage
+from happytube.trusted.stages import TrustedStage, is_video_id
 from happytube.utils import utc_now_iso
 from happytube.youtube import (
     RunStoppingError,
@@ -54,7 +54,7 @@ class FetchResult:
     shorts: int = 0
     live: int = 0  # live, upcoming or without a duration
     outside_window: int = 0
-    unreadable: int = 0  # no id or publish date in videos.list
+    unreadable: int = 0  # no valid id or no publish date in videos.list
     paths: list[str] = field(default_factory=list)
 
 
@@ -190,7 +190,7 @@ def _fetch_channel(fetch: _Fetch, channel: Channel) -> FetchResult:
     result.shorts = len(unseen) - len(candidates)
     for raw in fetch.client.videos(candidates) if candidates else []:
         video = evidence_video(raw, short_ids, description_max=None)
-        if video is None:
+        if video is None or not is_video_id(video.video_id):
             result.unreadable += 1
         elif _classify(fetch, result, raw, video):
             md = MarkdownFile(
@@ -205,22 +205,20 @@ def _fetch_channel(fetch: _Fetch, channel: Channel) -> FetchResult:
 
 
 def fetch_trusted(  # noqa: PLR0913 - the run's inputs, all keyword
-    store: ChannelStore,
+    channels: list[Channel],
     client: YouTubeClient,
     target_date: date,
     *,
-    slugs: list[str] | None = None,
     since_days: int = 14,
     max_per_channel: int = 50,
     base_path: Path = Path("stages"),
 ) -> FetchRun:
-    """Fetch new long-form videos of the approved channels (or ``slugs``, which
-    must all be approved) into ``stages/trusted/fetch/<date>/``.
+    """Fetch new long-form videos of ``channels`` (from ``approved_channels``)
+    into ``stages/trusted/fetch/<date>/``.
 
     Re-running for the same date writes nothing new: every video already in
     the fetch stage, on any date, is ``seen``.
     """
-    channels = approved_channels(store, slugs or [])
     stage = TrustedStage("fetch", base_path)
     fetch = _Fetch(
         client,
@@ -230,7 +228,10 @@ def fetch_trusted(  # noqa: PLR0913 - the run's inputs, all keyword
         stage.video_ids(),
     )
     run = FetchRun(
-        [FetchResult(c.slug, "not_fetched", message=_NOT_FETCHED) for c in channels]
+        [
+            FetchResult(c.slug, "not_fetched", c.channel_id, _NOT_FETCHED)
+            for c in channels
+        ]
     )
     for index, channel in enumerate(channels):
         try:

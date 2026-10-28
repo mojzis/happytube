@@ -216,3 +216,45 @@ def test_enhance_with_nothing_suitable_makes_no_client(base):
 def test_stage_run_is_not_the_entry_point(base):
     with pytest.raises(NotImplementedError):
         asyncio.run(TrustedStage("fetch", base).run(DAY))
+
+
+def test_assess_picks_up_earlier_dates_and_writes_under_them(base):
+    earlier = date(2026, 10, 26)
+    _fetched(base, "zoo", "old", day=earlier)  # left over by a failed run
+    _fetched(base, "zoo", "new")
+    client = FakeClaude()
+    run = _assess(base, client)
+    assert ([prompt_ids(p) for p in client.prompts], run.skipped) == (
+        [["old", "new"]],
+        0,
+    )
+    assert _front(base, "assess", "old", day=earlier)["suitable"] is True
+    enhance_trusted(DAY, FakeClaude, base_path=base)
+    assert _front(base, "enhance", "old", day=earlier)["stage"] == "trusted_enhance"
+
+
+def test_later_date_after_the_target_is_not_picked_up(base):
+    _fetched(base, "zoo", "later", day=date(2026, 10, 29))
+    assert _assess(base, FakeClaude()).results == []
+
+
+def test_force_redoes_only_the_target_date(base):
+    earlier = date(2026, 10, 27)
+    _fetched(base, "zoo", "old", day=earlier)
+    _fetched(base, "zoo", "new")
+    _assess(base, FakeClaude())
+    forced = FakeClaude()
+    _assess(base, forced, force=True)
+    assert [prompt_ids(p) for p in forced.prompts] == [["new"]]
+
+
+def test_unsuitable_rescore_removes_the_enhance_file(assessed):
+    enhance_trusted(DAY, FakeClaude, base_path=assessed)
+    assert TrustedStage("enhance", assessed).video_ids() == {"good"}
+    run = _assess(assessed, FakeClaude(scores={"good": (5, 4, ["war"])}), force=True)
+    [result] = run.results
+    assert result.unenhanced == [
+        str(TrustedStage("enhance", assessed).get_stage_dir(DAY) / "good.md")
+    ]
+    assert TrustedStage("enhance", assessed).video_ids() == set()
+    assert _front(assessed, "assess", "good")["suitable"] is False

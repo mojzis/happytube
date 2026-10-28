@@ -29,7 +29,7 @@ from happytube.cli.common import (
 from happytube.config.settings import AnthropicSettings
 from happytube.trusted.assess import assess_trusted
 from happytube.trusted.enhance import enhance_trusted
-from happytube.trusted.fetch import FetchRun, fetch_trusted
+from happytube.trusted.fetch import FetchRun, approved_channels, fetch_trusted
 from happytube.trusted.runs import ItemRun
 from happytube.trusted.stages import status_counts
 from happytube.utils import today_local
@@ -69,7 +69,7 @@ max_per_channel_option = click.option(
     help="Newest uploads looked at per channel (50 per quota unit).",
 )
 force_option = click.option(
-    "--force", is_flag=True, help="Redo the date's videos already done."
+    "--force", is_flag=True, help="Redo the date's videos already done (only those)."
 )
 dry_run_option = click.option(
     "--dry-run",
@@ -121,6 +121,8 @@ def _item_lines(run: ItemRun, verb: str) -> list[str]:
         text = f"{r.slug}: {r.status} {len(r.video_ids)} video(s)"
         if r.suitable is not None:
             text += f", {r.suitable} suitable"
+        if r.unenhanced:
+            text += f", {len(r.unenhanced)} enhance file(s) removed (now unsuitable)"
         if r.model and r.status == "done":
             text += f" ({r.model})"
         out.append(with_message(text, r.message))
@@ -180,11 +182,11 @@ def fetch_command(  # noqa: PLR0913 - one parameter per CLI option
     A named channel that is not approved is an error. Videos already fetched
     on any date are skipped, so a rerun for the same date writes nothing new.
     """
+    channels = approved_channels(store, list(slugs))  # before the key is needed
     run = fetch_trusted(
-        store,
+        channels,
         make_youtube_client(),
         target_date,
-        slugs=list(slugs),
         since_days=since_days,
         max_per_channel=max_per_channel,
     )
@@ -199,10 +201,11 @@ def fetch_command(  # noqa: PLR0913 - one parameter per CLI option
 def assess_command(
     target_date: date, force: bool, dry_run: bool, as_json: bool
 ) -> None:
-    """Score the date's fetched videos with the calm/happy rubric (Claude).
+    """Score fetched videos with the calm/happy rubric (Claude).
 
-    One call per channel batch; already assessed videos are skipped unless
-    --force.
+    Every video fetched on the date or earlier and not yet assessed; one call
+    per channel batch. --force re-scores the date's videos. A video now
+    unsuitable loses its enhance file.
     """
     run = assess_trusted(target_date, _claude(dry_run), force=force)
     _finish(run, as_json, lambda: _item_lines(run, "assessed"))
@@ -216,10 +219,10 @@ def assess_command(
 def enhance_command(
     target_date: date, force: bool, dry_run: bool, as_json: bool
 ) -> None:
-    """Rewrite descriptions of the date's suitable videos (Claude).
+    """Rewrite descriptions of suitable videos (Claude).
 
-    Unsuitable videos are never enhanced; already enhanced ones are skipped
-    unless --force.
+    Every suitable video assessed on the date or earlier and not yet enhanced;
+    unsuitable videos never are. --force redoes the date's videos.
     """
     run = enhance_trusted(target_date, _claude(dry_run), force=force)
     _finish(run, as_json, lambda: _item_lines(run, "enhanced"))
@@ -239,14 +242,20 @@ def run_command(
     max_per_channel: int,
     as_json: bool,
 ) -> None:
-    """Fetch, assess and enhance for the date; any failing step stops the chain.
+    """Fetch, then assess and enhance everything pending up to the date.
 
-    Every step is idempotent, so rerunning after a failure is cheap.
+    Both keys are checked before anything is fetched. A failed channel or
+    batch doesn't stop the chain (the others go on; exit non-zero at the end);
+    a used-up quota or a key, permission or credit problem does. Every step is
+    idempotent, so rerunning after a failure is cheap.
     """
+    channels = approved_channels(store, [])
+    youtube = make_youtube_client()
+    claude = make_claude_caller()  # fail fast: nothing fetched without the key
     steps: dict[str, Any] = {"fetch": None, "assess": None, "enhance": None}
     fetch = fetch_trusted(
-        store,
-        make_youtube_client(),
+        channels,
+        youtube,
         target_date,
         since_days=since_days,
         max_per_channel=max_per_channel,
@@ -254,11 +263,11 @@ def run_command(
     chain: list[tuple[str, FetchRun | ItemRun, list[str]]] = [
         ("fetch", fetch, _fetch_lines(fetch))
     ]
-    if not fetch.failed:
-        assess = assess_trusted(target_date, make_claude_caller)
+    if not fetch.aborted:
+        assess = assess_trusted(target_date, lambda: claude)
         chain.append(("assess", assess, _item_lines(assess, "assessed")))
-        if not assess.failed:
-            enhance = enhance_trusted(target_date, make_claude_caller)
+        if not assess.aborted:
+            enhance = enhance_trusted(target_date, lambda: claude)
             chain.append(("enhance", enhance, _item_lines(enhance, "enhanced")))
     for name, run, _ in chain:
         steps[name] = run.as_dict()
@@ -267,8 +276,12 @@ def run_command(
     else:
         print_lines([f"{name}: {line}" for name, _, lines in chain for line in lines])
     name, last, _ = chain[-1]
-    if problem := _failure(last, as_json):
-        msg = f"{name} failed, chain stopped. {problem}"
+    if last.aborted:
+        msg = f"{name} stopped, chain stopped. Stopped early: {last.aborted}"
+        raise click.ClickException(msg)
+    if failed := [name for name, run, _ in chain if run.failed]:
+        where = "the JSON on stdout" if as_json else "the report above"
+        msg = f"Some items failed in {', '.join(failed)}; see {where}"
         raise click.ClickException(msg)
 
 

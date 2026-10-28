@@ -2,8 +2,8 @@
 
 One Claude call per video: volume is a handful a day, and one bad reply then
 costs only its own video. Unsuitable videos are never sent and never reach
-``stages/trusted/enhance/``. A video already enhanced (any date) is skipped
-unless ``force``.
+``stages/trusted/enhance/``. Every suitable video not yet enhanced, on any date
+up to the target, is picked up; ``force`` redoes the target date's.
 """
 
 from datetime import date
@@ -22,7 +22,7 @@ from happytube.trusted.runs import (
     TrustedClient,
     run_items,
 )
-from happytube.trusted.stages import TrustedStage
+from happytube.trusted.stages import Dated, TrustedStage, pending, video_id_of
 from happytube.utils import utc_now_iso
 
 DESCRIPTION_MAX = 5000
@@ -50,10 +50,10 @@ def build_prompt(md: MarkdownFile) -> Prompt:
 def _enhance_one(
     client: TrustedClient,
     result: ItemResult,
-    md: MarkdownFile,
-    target_date: date,
+    item: Dated,
     stage: TrustedStage,
 ) -> None:
+    day, md = item
     output = result.record(client.call(build_prompt(md), EnhanceOutput))
     if output is None:
         return
@@ -68,9 +68,8 @@ def _enhance_one(
         "enhance_model": result.model,
         "stage": "trusted_enhance",
     }
-    path = stage.write(
-        target_date, result.video_ids[0], MarkdownFile(frontmatter, md.content)
-    )
+    # Under the assess (= fetch) file's date, so each date's stages line up.
+    path = stage.write(day, result.video_ids[0], MarkdownFile(frontmatter, md.content))
     result.paths.append(str(path))
     result.status = "done"
 
@@ -82,29 +81,26 @@ def enhance_trusted(
     force: bool = False,
     base_path: Path = Path("stages"),
 ) -> ItemRun:
-    """Enhance the date's suitable assessed videos; ``make_client=None`` is a
-    dry run. ``skipped`` counts suitable videos already enhanced."""
+    """Enhance every suitable assessed video (dated ``target_date`` or earlier)
+    not yet enhanced; ``force`` redoes the date's. ``make_client=None`` is a dry
+    run. ``skipped`` counts the date's suitable videos already enhanced."""
     stage = TrustedStage("enhance", base_path)
     suitable = [
-        md
-        for md in TrustedStage("assess", base_path).load(target_date)
+        (day, md)
+        for day, md in TrustedStage("assess", base_path).load_until(target_date)
         if md.frontmatter.get("suitable") is True
     ]
-    done = set() if force else stage.video_ids()
-    todo = [md for md in suitable if str(md.frontmatter["video_id"]) not in done]
+    todo, skipped = pending(suitable, stage.video_ids(), target_date, force=force)
     items = [
         (
-            ItemResult(
-                str(md.frontmatter.get("channel_slug")),
-                [str(md.frontmatter["video_id"])],
-            ),
-            md,
+            ItemResult(str(md.frontmatter.get("channel_slug")), [video_id_of(md)]),
+            (day, md),
         )
-        for md in todo
+        for day, md in todo
     ]
     return run_items(
         items,
         make_client,
-        lambda client, result, md: _enhance_one(client, result, md, target_date, stage),
-        skipped=len(suitable) - len(todo),
+        lambda client, result, item: _enhance_one(client, result, item, stage),
+        skipped=skipped,
     )
