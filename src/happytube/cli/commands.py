@@ -16,6 +16,7 @@ from rich.table import Table
 from happytube.cli.channels import channels
 from happytube.cli.serve import serve
 from happytube.cli.trusted import trusted
+from happytube.cli.videos import videos
 from happytube.config.config_manager import ConfigManager
 from happytube.config.settings import get_settings
 from happytube.models.video import MAX_HAPPINESS, MIN_HAPPINESS
@@ -569,6 +570,7 @@ def status(date: str | None):
 cli.add_command(channels)
 cli.add_command(serve)
 cli.add_command(trusted)
+cli.add_command(videos)
 
 
 if __name__ == "__main__":
