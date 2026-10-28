@@ -2,57 +2,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HappyTube Player</title>
-    <meta name="description" content="Curated collection of happy YouTube videos - watch without distractions">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <title>HappyTube</title>
+    <meta name="description" content="Calm, happy videos — just watch">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <!-- Sidebar with video playlist -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>📺 HappyTube</h2>
-                <p class="subtitle">Curated Happy Videos</p>
-            </div>
+    <main class="stage">
+        <div class="frame"><div id="player"></div></div>
+        <p id="message" class="message">Loading…</p>
+    </main>
 
-            <div class="playlist-controls">
-                <input type="text" id="searchBox" placeholder="Search videos..." />
-                <div class="filter-controls">
-                    <label>
-                        <input type="checkbox" id="autoplayNext" checked>
-                        Auto-play next
-                    </label>
-                </div>
-            </div>
+    <!-- Portrait: a quiet strip under the video. Landscape: hidden. -->
+    <footer class="bar">
+        <div class="now">
+            <span id="title" class="title"></span>
+            <span id="channel" class="channel"></span>
+        </div>
+        <button id="nextBtn" class="btn" type="button" aria-label="Next video">&#x23ED;</button>
+        <button id="listBtn" class="btn" type="button" aria-label="All videos">&#x2630;</button>
+    </footer>
 
-            <div id="videoList" class="video-list">
-                <div class="loading">Loading videos...</div>
-            </div>
-        </aside>
+    <!-- Landscape: one faint button in the corner. -->
+    <button id="cornerBtn" class="corner" type="button" aria-label="All videos">&#x2630;</button>
 
-        <!-- Main player area -->
-        <main class="player-area">
-            <div class="player-wrapper">
-                <div id="player"></div>
-            </div>
+    <dialog id="sheet" class="sheet" aria-label="All videos">
+        <div class="sheet-head">
+            <span>Videos</span>
+            <button id="closeBtn" class="btn small" type="button" aria-label="Close">&#x2715;</button>
+        </div>
+        <ul id="list" class="list"></ul>
+    </dialog>
 
-            <div class="video-info">
-                <h1 id="videoTitle">Select a video to start</h1>
-                <p class="channel-title" id="channelTitle"></p>
-                <div class="video-description">
-                    <p id="videoDescription"></p>
-                </div>
-            </div>
-
-            <div class="controls">
-                <button id="prevBtn" class="control-btn">⏮ Previous</button>
-                <button id="nextBtn" class="control-btn">Next ⏭</button>
-            </div>
-        </main>
-    </div>
-
-    <!-- YouTube IFrame API -->
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="player.js"></script>
 </body>
