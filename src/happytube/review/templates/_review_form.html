@@ -1,6 +1,7 @@
 <form class="review-form" method="post" action="/channels/{{ channel.slug }}/reviews"
       hx-post="/channels/{{ channel.slug }}/reviews" hx-target="#reviews" hx-swap="outerHTML">
   <h3>Your review</h3>
+  <p class="error-message htmx-error" role="alert" hidden></p>
   {% if error %}<p class="error-message" role="alert">{{ error }}</p>{% endif %}
   <label>Reviewer
     <input type="text" name="reviewer" value="{{ form.reviewer }}" required autocomplete="name">

@@ -13,6 +13,7 @@ import ipaddress
 import re
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import quote, unquote
@@ -46,12 +47,6 @@ SAME_SITE_FETCH = frozenset({"same-origin", "none"})
 VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 _HOST_RE = re.compile(r"\[(?P<v6>[^\]]+)\](?::\d+)?|(?P<name>[^:\[\]]+)(?::\d+)?")
 
-HTTP_BAD_REQUEST = 400
-HTTP_FORBIDDEN = 403
-HTTP_NOT_FOUND = 404
-HTTP_UNPROCESSABLE = 422
-HTTP_SERVER_ERROR = 500
-
 
 def is_loopback(host: str) -> bool:
     """``localhost`` or a loopback IP (``127.0.0.0/8``, ``::1``)."""
@@ -63,12 +58,30 @@ def is_loopback(host: str) -> bool:
         return False
 
 
+def is_wildcard(host: str) -> bool:
+    """An all-interfaces bind address (``0.0.0.0``, ``::``): no client sends it as
+    ``Host``, so it cannot be allow-listed."""
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_unspecified
+    except ValueError:
+        return False
+
+
+def _canonical(name: str) -> str:
+    """An IP address in its canonical form (``FE80:0::1`` → ``fe80::1``), else the
+    name lowercased."""
+    try:
+        return str(ipaddress.ip_address(name))
+    except ValueError:
+        return name.lower()
+
+
 def host_name(header: str) -> str | None:
-    """The host part of a ``Host`` header, lowercased, without port or brackets."""
+    """The host part of a ``Host`` header, without port or brackets, canonical."""
     match = _HOST_RE.fullmatch(header.strip())
     if not match:
         return None
-    return (match["v6"] or match["name"]).lower()
+    return _canonical(match["v6"] or match["name"])
 
 
 def _fmt_dt(value: datetime | None) -> str:
@@ -144,18 +157,26 @@ def _origin_ok(request: Request) -> bool:
 
 
 def allowed_host_names(bind_host: str | None) -> frozenset[str]:
-    """Loopback names, plus the host part of ``bind_host`` if given."""
-    name = host_name(bind_host) if bind_host else None
-    return LOOPBACK_HOSTS | {name} if name else LOOPBACK_HOSTS
+    """Loopback names, plus ``bind_host`` (a name, or a bare or bracketed IPv4/IPv6
+    address) if given."""
+    if not bind_host:
+        return LOOPBACK_HOSTS
+    return LOOPBACK_HOSTS | {_canonical(bind_host.strip().strip("[]"))}
 
 
-def parse_review(reviewer: str, verdict: str, notes: str) -> Review | str:
-    """A human ``Review`` from form fields, or the error message to show."""
+class FormError(ValueError):
+    """Form or query input the user has to correct; the message is shown to them."""
+
+
+def parse_review(reviewer: str, verdict: str, notes: str) -> Review:
+    """A human ``Review`` from form fields; ``FormError`` says what to correct."""
     reviewer = reviewer.strip()
     if not reviewer:
-        return "Enter your name as reviewer."
+        msg = "Enter your name as reviewer."
+        raise FormError(msg)
     if verdict not in VERDICTS:
-        return "Choose approve, reject or unsure."
+        msg = "Choose approve, reject or unsure."
+        raise FormError(msg)
     try:
         return Review.model_validate(
             {
@@ -166,16 +187,23 @@ def parse_review(reviewer: str, verdict: str, notes: str) -> Review | str:
             }
         )
     except ValidationError as e:
-        return "; ".join(err["msg"] for err in e.errors())
+        raise FormError("; ".join(err["msg"] for err in e.errors())) from e
 
 
-def parse_filters(**values: str | None) -> dict[str, str | None] | str:
-    """Queue filters with empty meaning absent, or the error for an unknown value."""
+def parse_filters(
+    status: str | None, kind: str | None, language: str | None
+) -> dict[str, str | None]:
+    """Queue filters with empty meaning absent; ``FormError`` on an unknown value."""
+    filters = {
+        "status": _blank(status),
+        "kind": _blank(kind),
+        "language": _blank(language),
+    }
     allowed = {"status": STATUSES, "kind": KINDS, "language": LANGUAGES}
-    filters = {key: _blank(value) for key, value in values.items()}
     for key, value in filters.items():
         if value is not None and value not in allowed[key]:
-            return f"Unknown {key} filter '{value}'"
+            msg = f"Unknown {key} filter '{value}'"
+            raise FormError(msg)
     return filters
 
 
@@ -192,9 +220,9 @@ def _install_guard(app: FastAPI, allowed_hosts: frozenset[str]) -> None:
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         if host_name(request.headers.get("host", "")) not in allowed_hosts:
-            return _text(HTTP_BAD_REQUEST, "Bad Host header")
+            return _text(HTTPStatus.BAD_REQUEST, "Bad Host header")
         if request.method not in SAFE_METHODS and not _origin_ok(request):
-            return _text(HTTP_FORBIDDEN, "Cross-site request refused")
+            return _text(HTTPStatus.FORBIDDEN, "Cross-site request refused")
         return await call_next(request)
 
 
@@ -216,7 +244,11 @@ class _Pages:
             request, name, context, status_code=status_code
         )
 
-    def error(self, request: Request, status_code: int, message: str) -> HTMLResponse:
+    def error(self, request: Request, status_code: int, message: str) -> Response:
+        """The error page; for an htmx request just the message as plain text,
+        which ``review.js`` shows in the ``role="alert"`` region."""
+        if _is_htmx(request):
+            return _text(status_code, message)
         context = {"status_code": status_code, "message": message}
         return self.render(request, "error.html", context, status_code)
 
@@ -249,15 +281,15 @@ def _install_error_handlers(app: FastAPI, pages: _Pages) -> None:
     """Store errors and HTTP errors as HTML pages; never a traceback."""
 
     @app.exception_handler(ChannelNotFoundError)
-    async def not_found(request: Request, exc: ChannelNotFoundError) -> HTMLResponse:
-        return pages.error(request, HTTP_NOT_FOUND, str(exc))
+    async def not_found(request: Request, exc: ChannelNotFoundError) -> Response:
+        return pages.error(request, HTTPStatus.NOT_FOUND, str(exc))
 
     @app.exception_handler(ChannelStoreError)
-    async def store_error(request: Request, exc: ChannelStoreError) -> HTMLResponse:
-        return pages.error(request, HTTP_SERVER_ERROR, str(exc))
+    async def store_error(request: Request, exc: ChannelStoreError) -> Response:
+        return pages.error(request, HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_error(request: Request, exc: StarletteHTTPException) -> HTMLResponse:
+    async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
         return pages.error(request, exc.status_code, str(exc.detail))
 
 
@@ -289,18 +321,21 @@ def create_app(
 
     @app.get("/")
     async def index() -> RedirectResponse:
-        return RedirectResponse("/channels", status_code=303)
+        return RedirectResponse("/channels", status_code=HTTPStatus.SEE_OTHER)
 
-    @app.get("/channels")
-    async def queue(
+    # Routes reading or writing the registry are plain ``def``: FastAPI runs them in
+    # a thread pool, so file I/O does not block the event loop.
+    @app.get("/channels", response_model=None)
+    def queue(
         request: Request,
         status: str | None = None,
         kind: str | None = None,
         language: str | None = None,
-    ) -> HTMLResponse:
-        filters = parse_filters(status=status, kind=kind, language=language)
-        if isinstance(filters, str):
-            return pages.error(request, HTTP_BAD_REQUEST, filters)
+    ) -> Response:
+        try:
+            filters = parse_filters(status, kind, language)
+        except FormError as e:
+            return pages.error(request, HTTPStatus.BAD_REQUEST, str(e))
         entries = store.entries()
         context = {
             "sections": queue_sections(
@@ -323,12 +358,12 @@ def create_app(
         return response
 
     @app.get("/channels/{slug}")
-    async def detail(request: Request, slug: str) -> HTMLResponse:
+    def detail(request: Request, slug: str) -> HTMLResponse:
         context = pages.detail_context(request, store.get(slug))
         return pages.render(request, "channel.html", context)
 
     @app.post("/channels/{slug}/reviews", response_model=None)
-    async def post_review(
+    def post_review(
         request: Request,
         slug: str,
         reviewer: Annotated[str, Form()] = "",
@@ -336,13 +371,14 @@ def create_app(
         notes: Annotated[str, Form()] = "",
     ) -> Response:
         entry = store.get(slug)  # 404 before anything else
-        review = parse_review(reviewer, verdict, notes)
         htmx = _is_htmx(request)
-        if isinstance(review, str):
+        try:
+            review = parse_review(reviewer, verdict, notes)
+        except FormError as e:
             form = {"reviewer": reviewer.strip(), "verdict": verdict, "notes": notes}
-            context = pages.detail_context(request, entry, form, review)
+            context = pages.detail_context(request, entry, form, str(e))
             name = "_reviews.html" if htmx else "channel.html"
-            return pages.render(request, name, context, HTTP_UNPROCESSABLE)
+            return pages.render(request, name, context, HTTPStatus.UNPROCESSABLE_ENTITY)
         store.add_review(slug, review)
         if htmx:
             fresh = {"reviewer": review.reviewer, "notes": ""}
@@ -350,7 +386,9 @@ def create_app(
             context["oob_status"] = True
             response: Response = pages.render(request, "_reviews.html", context)
         else:
-            response = RedirectResponse(f"/channels/{slug}", status_code=303)
+            response = RedirectResponse(
+                f"/channels/{slug}", status_code=HTTPStatus.SEE_OTHER
+            )
         _remember_reviewer(response, review.reviewer)
         return response
 

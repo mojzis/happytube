@@ -4,7 +4,15 @@ import pytest
 import yaml
 
 from happytube.channels.store import ChannelStore
-from happytube.review.app import REVIEWER_COOKIE, host_name, is_loopback
+from happytube.review.app import (
+    REVIEWER_COOKIE,
+    FormError,
+    allowed_host_names,
+    host_name,
+    is_loopback,
+    is_wildcard,
+    parse_filters,
+)
 from tests.review_helpers import (
     BASE_URL,
     QUEUE,
@@ -99,6 +107,19 @@ def test_queue_unknown_filter_is_400(app):
     assert "Unknown status filter" in response.text
 
 
+def test_parse_filters_blank_means_absent():
+    assert parse_filters("", " zoo ", None) == {
+        "status": None,
+        "kind": "zoo",
+        "language": None,
+    }
+
+
+def test_parse_filters_unknown_value_raises_form_error():
+    with pytest.raises(FormError, match="Unknown language filter 'xx'"):
+        parse_filters(None, None, "xx")
+
+
 def test_queue_missing_registry_shows_no_channels(tmp_path):
     response = client(ChannelStore(tmp_path / "missing")).get(QUEUE)
     assert response.status_code == 200
@@ -160,6 +181,56 @@ def test_broken_channel_yaml_is_500_with_message(app, store, path):
     assert response.status_code == 500
     assert "channel.yaml: invalid YAML" in response.text
     assert "Traceback" not in response.text
+
+
+# --- errors on htmx requests (shown by review.js in the role="alert" region) ---
+
+
+def test_htmx_post_store_error_is_500_plain_message(app, store):
+    (store.root / "zoo-praha" / "channel.yaml").write_text("slug: [", encoding="utf-8")
+
+    response = _post(app, headers=HTMX)
+
+    assert response.status_code == 500
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "channel.yaml: invalid YAML" in response.text
+    assert "<html" not in response.text
+
+
+def test_htmx_post_unknown_channel_is_404_plain_message(app):
+    response = _post(app, slug="nope", headers=HTMX)
+
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "nope" in response.text
+
+
+def test_htmx_unknown_filter_is_400_plain_message(app):
+    response = app.get(QUEUE, params={"kind": "bogus"}, headers=HTMX)
+
+    assert response.status_code == 400
+    assert response.text == "Unknown kind filter 'bogus'"
+
+
+def test_htmx_cross_site_post_is_403_plain_message(app, store):
+    response = _post(app, headers=HTMX | {"Origin": "https://evil.example"})
+
+    assert response.status_code == 403
+    assert response.text == "Cross-site request refused"
+    assert len(_review_files(store, "zoo-praha")) == 1
+
+
+@pytest.mark.parametrize("path", [QUEUE, detail_url("zoo-praha")])
+def test_pages_have_an_alert_region_for_htmx_errors(app, path):
+    html = app.get(path).text
+    alert = 'class="error-message htmx-error" role="alert" hidden'
+    assert missing(html, alert, 'src="/static/review.js"') == []
+
+
+def test_review_js_shows_error_as_text(app):
+    js = app.get("/static/review.js").text
+    assert missing(js, "htmx:responseError", "textContent") == []
+    assert "innerHTML" not in js
 
 
 @pytest.fixture
@@ -274,8 +345,12 @@ def test_htmx_post_writes_review(app, store):
 def test_unsure_and_agent_reviews_do_not_change_status(app, store):
     _post(app, verdict="unsure")
     store.add_review("zoo-praha", review("approve", role="agent", hours=5))
+
+    assert len(_review_files(store, "zoo-praha")) == 3
     assert store.get("zoo-praha").status == "candidate"
 
+
+def test_reject_post_makes_status_rejected(app, store):
     _post(app, verdict="reject")
     assert store.get("zoo-praha").status == "rejected"
 
@@ -303,15 +378,18 @@ def test_post_to_unknown_channel_is_404(app, store):
     assert not (store.root / "nope").exists()
 
 
-def test_reviewer_prefill_cookie_then_default_then_empty(store):
-    assert 'name="reviewer" value=""' in client(store).get(detail_url("zoo-praha")).text
+def test_reviewer_empty_without_cookie_or_default(store):
+    html = client(store).get(detail_url("zoo-praha")).text
+    assert 'name="reviewer" value=""' in html
 
+
+def test_reviewer_prefilled_from_default(store):
+    html = client(store, default_reviewer="babička-helper").get(detail_url("ct-decko"))
+    assert 'name="reviewer" value="babička-helper"' in html.text
+
+
+def test_reviewer_cookie_beats_default(store):
     app = client(store, default_reviewer="babička-helper")
-    assert (
-        'name="reviewer" value="babička-helper"'
-        in app.get(detail_url("zoo-praha")).text
-    )
-
     _post(app, reviewer="Matouš")  # TestClient keeps the cookie
     assert 'name="reviewer" value="Matouš"' in app.get(detail_url("ct-decko")).text
 
@@ -334,10 +412,23 @@ def test_other_host_is_400(app, store, host):
     assert len(_review_files(store, "zoo-praha")) == 1
 
 
-def test_non_loopback_bind_host_is_also_allowed(store):
-    app = client(store, bind_host="192.168.1.5")
-    assert app.get(QUEUE, headers={"Host": "192.168.1.5:8000"}).status_code == 200
+@pytest.mark.parametrize(
+    ("bind_host", "header"),
+    [
+        ("192.168.1.5", "192.168.1.5:8000"),
+        ("fe80::1", "[fe80::1]:8000"),
+        ("[FE80:0::1]", "[fe80::1]"),
+        ("Pi.local", "pi.local:8000"),
+    ],
+)
+def test_non_loopback_bind_host_is_also_allowed(store, bind_host, header):
+    app = client(store, bind_host=bind_host)
+    assert app.get(QUEUE, headers={"Host": header}).status_code == 200
     assert app.get(QUEUE, headers={"Host": "evil.example"}).status_code == 400
+
+
+def test_allowed_host_names_without_bind_host_is_loopback_only():
+    assert allowed_host_names(None) == {"127.0.0.1", "localhost", "::1"}
 
 
 @pytest.mark.parametrize(
@@ -390,6 +481,7 @@ def test_pages_load_no_external_scripts_or_styles(app):
         ("127.0.0.1:8000", "127.0.0.1"),
         ("[::1]:80", "::1"),
         ("LocalHost", "localhost"),
+        ("[FE80:0:0::1]:8000", "fe80::1"),
         ("a:b:c", None),
     ],
 )
@@ -410,3 +502,17 @@ def test_host_name(header, name):
 )
 def test_is_loopback(host, loopback):
     assert is_loopback(host) is loopback
+
+
+@pytest.mark.parametrize(
+    ("host", "wildcard"),
+    [
+        ("0.0.0.0", True),  # noqa: S104
+        ("::", True),
+        ("[::]", True),
+        ("192.168.1.5", False),
+        ("localhost", False),
+    ],
+)
+def test_is_wildcard(host, wildcard):
+    assert is_wildcard(host) is wildcard

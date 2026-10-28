@@ -8,12 +8,14 @@
   <title>{% block title %}Channel review{% endblock %} · HappyTube</title>
   <link rel="stylesheet" href="/static/review.css">
   <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/review.js" defer></script>
 </head>
 <body>
   <header class="site">
     <a href="/channels" class="home">HappyTube · channel review</a>
   </header>
   <main>
+    <p id="htmx-error" class="error-message htmx-error" role="alert" hidden></p>
 {% block content %}{% endblock %}
   </main>
 </body>
