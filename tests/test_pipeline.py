@@ -133,8 +133,9 @@ class TestSettings:
         with pytest.raises(ValidationError):
             Settings()
 
-    def test_missing_credentials(self, monkeypatch):
+    def test_missing_credentials(self, monkeypatch, tmp_path):
         """Test detection of missing credentials."""
+        monkeypatch.chdir(tmp_path)  # a real .env in the repo root would fill them
         # Only set one key
         monkeypatch.setenv("YTKEY", "test_key")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)

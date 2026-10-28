@@ -1,0 +1,7 @@
+reviewer: claude-orchestrator
+role: agent
+verdict: unsure
+notes: 'Identity check: @NationalParkService resolved to ''NationalParkService'' (US,
+  ~30.5k subs, official-looking description). Low subscriber count for NPS — human:
+  confirm it is the official channel before approving.'
+created_at: '2026-10-28T19:07:47.008910Z'

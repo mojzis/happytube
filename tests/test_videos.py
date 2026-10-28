@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from happytube.videos import Search, Videos, YouTubeAPIError
 
@@ -59,3 +60,18 @@ def test_get_error_without_json_body_keeps_status():
         pytest.raises(YouTubeAPIError, match=r"500 Forbidden$"),
     ):
         Search(key="k").get()
+
+
+def test_get_transport_error_hides_url_and_key():
+    leaked = "search?key=secret-key"
+    with (
+        patch(
+            "happytube.videos.requests.get",
+            side_effect=requests.ConnectionError(f"Max retries exceeded: {leaked}"),
+        ),
+        pytest.raises(YouTubeAPIError, match="ConnectionError") as excinfo,
+    ):
+        Search(key="secret-key").get()
+    assert "secret-key" not in str(excinfo.value)
+    assert excinfo.value.__cause__ is None
+    assert excinfo.value.__suppress_context__

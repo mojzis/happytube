@@ -4,43 +4,45 @@ _Updated 2026-10-28._
 
 ## Where we are
 
-- Plan: `docs/plan.md` (phases 0–5 + backlog). Source idea:
-  `~/git/ideas/projects/happytube/ideas/trusted-channels.md`.
-- Phase 0 merged to `main` (PR #6).
-- **Phase 1 done**, merged to `main` (PR #7):
-  `happytube.channels` package (`Channel`/`Review` models, `ChannelStore`,
-  `derive_status`, `filter_entries`), `happytube channels add/list/show/review`
-  with `--json`, no API keys needed. 15 seed candidates in `channels/`
-  (only `@bbcearth`, `@NatGeo` have handles; no channel ids). Decision 0003 (layout).
-  Tests 46 → 122, `poe check` green, coverage 59%.
-  Record: `docs/phases/phase-1/` (log.md has every agent report, learnings.md).
-- Process lessons (cumulative): `docs/process-learnings.md`.
+- Plan: `docs/plan.md` (phases 0–5 + backlog).
+- Phases 0, 1, 2 merged (PRs #6, #7, #9). **Phase 2 done** (channel evidence);
+  merged with full history — commit 6a89bb6 alone is inconsistent (V6, bisect only).
+  - `happytube channels resolve` (handle → channel id, written to channel.yaml only
+    when null; `--verify` re-checks) and `channels evidence` (stats + recent
+    uploads + durations, append-only snapshots in `channels/<slug>/evidence/`).
+  - Shorts = membership of the channel's `UUSH…` playlist (404 = none); duration
+    rule only as fallback. Quota ≈ 3N + N/50 per full refresh (500 ch ≈ 1510).
+  - Decision 0004, research note `docs/research/channel-fetch-methods.md`
+    (RSS deferred to phase 5 polling).
+  - 13/15 channels resolved, snapshots committed — but taken **before** the UUSH
+    switch, so their Shorts flags use the old ≤180 s rule (`shorts_source: duration`).
+  - Tests 122 → 212, coverage 59% → 69%.
+  - Record: `docs/phases/phase-2/` (log.md, learnings.md).
+- Process lessons: `docs/process-learnings.md`.
 
 ## Next step
 
-1. Start **phase 2 — channel evidence**: write `docs/phases/phase-2/context.md`, then
-   run the loop (same as phase 1; see learnings for brief tweaks: `--detach`
-   worktrees, split review/QA scope, verify judges every fix deviation).
-   Phase 2 scope (from plan): resolve handles → channel ids (`channels.list`
-   `forHandle`), stats + recent uploads (RSS vs `playlistItems`), video durations
-   (Shorts), cached per channel under `channels/<slug>/evidence/`; research note +
-   decision record comparing fetch methods with quota math for 50/200/500 channels.
-2. End the session by opening the PR and merging it once the user says so (see
-   `docs/plan.md` → Per-phase loop, step 7).
+1. **User:** fix `YTKEY` in `.env` (stray trailing character; YouTube says
+   `API_KEY_INVALID`). Then `uv run happytube channels evidence --all` (~42 units),
+   check UUSH Shorts counts look sane, commit the new snapshots.
+2. **Content questions (deferred by user):** agent `unsure` reviews on ct-decko,
+   zoo-zlin (handles unknown), national-park-service (identity),
+   zoo-dvur-kralove (inactive since 2024-08). `channels show <slug>`.
+3. Start **phase 3 — agent vetting**: write `docs/phases/phase-3/context.md`
+   (rubric for calm/happy from the constitution, vet report format under
+   `channels/<slug>/vet/`, agent review record, `channels vet <slug>`, Claude model
+   choice — load the `claude-api` skill), then run the loop. Fold in the backlog
+   item "auto-flag unresolved / inactive / look-alike channels".
 
-## Open decisions (settle in phase 2 context.md)
+## Open decisions (settle in phase 3 context.md)
 
-- Needs a real `YTKEY` for the resolve/evidence run (no `.env` in the repo now):
-  user provides one, or phase 2 builds + tests with mocks and the user runs it.
-- Evidence format: YAML snapshot per fetch (timestamped, append-only like reviews)
-  vs one overwritten `evidence.yaml` (git history keeps old ones).
-- Seed handles for the 13 unresolved channels: agent proposes via search
-  (100 units each) or the user fills them by hand.
-- Allowlist vs blocklist: closed — `rejected` channel = blocklist (decision 0003).
+- Vet input: latest snapshot only, or also fetch transcripts/thumbnails?
+- Vet output: verdict scale (approve/reject/unsure as agent review) + per-video
+  calm/happy scores reused later by video assessment?
+- Re-vet policy when a newer snapshot appears.
 
 ## Decided
 
-- Runner: manual; the user drives the loop from the session (`docs/plan.md` →
-  Per-phase loop). No runner skill yet.
-- Registry layout (decision 0003): `channels/<slug>/channel.yaml` +
-  append-only `reviews/`; status derived from latest human approve/reject.
+- Runner: manual; the user drives the loop from the session.
+- Registry layout (0003); evidence = append-only snapshots, API method, UUSH Shorts,
+  channel_id write-back only when null (0004).
