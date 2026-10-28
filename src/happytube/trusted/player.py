@@ -68,7 +68,7 @@ class StageRecord:
     body: str = ""
 
 
-def _latest_per_video(records: list[StageRecord]) -> dict[str, StageRecord]:
+def latest_per_video(records: list[StageRecord]) -> dict[str, StageRecord]:
     """By file name (= video id): the record in the latest date dir. That copy
     is the truth even if broken — an older one may be stale."""
     latest: dict[str, StageRecord] = {}
@@ -101,6 +101,14 @@ def _description(record: StageRecord) -> str | None:
     return value.strip() or None
 
 
+def enhanced_descriptions(enhance: list[StageRecord]) -> dict[str, str | None]:
+    """Per video id, its latest enhance file's non-empty description or ``None``."""
+    return {
+        video_id: _description(record)
+        for video_id, record in latest_per_video(enhance).items()
+    }
+
+
 def select_videos(
     assess: list[StageRecord],
     enhance: list[StageRecord],
@@ -111,12 +119,9 @@ def select_videos(
     so the order is deterministic). ``statuses`` maps a channel slug to its
     current status; a slug not in it is not shown. ``hidden`` are the ids human
     spot-checks keep out (``video_reviews.hidden_ids``)."""
-    descriptions = {
-        video_id: _description(record)
-        for video_id, record in _latest_per_video(enhance).items()
-    }
+    descriptions = enhanced_descriptions(enhance)
     shown: list[PlayerVideo] = []
-    for video_id, record in _latest_per_video(assess).items():
+    for video_id, record in latest_per_video(assess).items():
         assessed = parse_assessed(record, Assessed)
         description = descriptions.get(video_id)
         if (

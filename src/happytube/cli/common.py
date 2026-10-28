@@ -40,9 +40,9 @@ stages_dir_option = click.option(
     envvar="HAPPYTUBE_STAGES_DIR",
     default=Path("stages"),
     show_default="stages/ in the current directory",
-    help="Stage data directory the player reads (its trusted/). Only where the "
-    "player and the export read; the trusted commands always write stages/ in the "
-    "current directory (env: HAPPYTUBE_STAGES_DIR).",
+    help="Stage data directory the player, the export and the video queue read "
+    "(its trusted/). Only where they read; the trusted commands always write "
+    "stages/ in the current directory (env: HAPPYTUBE_STAGES_DIR).",
 )
 
 video_reviews_dir_option = click.option(

@@ -1,9 +1,10 @@
-"""Local web app: the channel review UI (decision 0007) and the player
-(decision 0010).
+"""Local web app: the channel review UI (decision 0007), video spot-checks
+(decision 0011, routes in ``review.videos``) and the player (decision 0010).
 
-``create_app`` builds a FastAPI app over one ``ChannelStore``; the store is the only
-reader and writer, re-read on every request. Reviews posted here are the same
-records ``happytube channels review`` writes, always ``role: human``.
+``create_app`` builds a FastAPI app over one ``ChannelStore`` and one
+``VideoReviewStore``; they are the only readers and writers, re-read on every
+request. Reviews posted here are the same records ``happytube channels review`` /
+``happytube videos review`` write, always ``role: human``.
 
 ``/player/`` serves the static player page (``happytube/web/static``) and
 ``/player/videos.json`` the selection read live from ``stages/trusted/``, the
@@ -18,17 +19,13 @@ import ipaddress
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Any
-from urllib.parse import quote, unquote
 
-import jinja2
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -42,30 +39,31 @@ from happytube.channels.store import (
 )
 from happytube.channels.vet import long_form
 from happytube.review.estimate import channel_watchable, watchable_estimate
-from happytube.review.queue import (
-    is_unresolved,
-    needs_attention,
-    next_entry,
-    queue_sections,
+from happytube.review.pages import (
+    PACKAGE_DIR,
+    FormError,
+    Pages,
+    blank,
+    is_htmx,
+    remember_reviewer,
+    text_response,
 )
+from happytube.review.queue import next_entry, queue_sections
+from happytube.review.videos import install_video_routes
 from happytube.trusted.player import player_videos, videos_json
 from happytube.trusted.video_reviews import (
     VIDEO_REVIEWS_DIR,
+    VideoNotFoundError,
     VideoReviewsMissingError,
     VideoReviewStore,
 )
 
 logger = logging.getLogger(__name__)
 
-PACKAGE_DIR = Path(__file__).parent
 PLAYER_DIR = PACKAGE_DIR.parent / "web" / "static"
-REVIEWER_COOKIE = "happytube_reviewer"
-COOKIE_MAX_AGE = 365 * 24 * 3600
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 SAME_SITE_FETCH = frozenset({"same-origin", "none"})
-# YouTube video ids are URL-safe base64; anything else is never put in a link.
-VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 _HOST_RE = re.compile(r"\[(?P<v6>[^\]]+)\](?::\d+)?|(?P<name>[^:\[\]]+)(?::\d+)?")
 
 
@@ -105,40 +103,6 @@ def host_name(header: str) -> str | None:
     return _canonical(match["v6"] or match["name"])
 
 
-def _fmt_dt(value: datetime | None) -> str:
-    if value is None:
-        return "—"
-    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
-
-
-def _fmt_int(value: int | None) -> str:
-    return "—" if value is None else f"{value:,}".replace(",", " ")
-
-
-def _is_video_id(value: object) -> bool:
-    return bool(VIDEO_ID_RE.fullmatch(str(value)))
-
-
-def _templates() -> Jinja2Templates:
-    env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(PACKAGE_DIR / "templates"),
-        autoescape=True,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    # Typed as Any: ty infers jinja's defaults dicts too narrowly to add to them.
-    filters: dict[str, Any] = {"dt": _fmt_dt, "num": _fmt_int}
-    tests: dict[str, Any] = {"video_id": _is_video_id}
-    helpers: dict[str, Any] = {
-        "needs_attention": needs_attention,
-        "is_unresolved": is_unresolved,
-    }
-    env.filters.update(filters)
-    env.tests.update(tests)
-    env.globals.update(helpers)
-    return Jinja2Templates(env=env)
-
-
 def evidence_view(entry: ChannelEntry) -> dict[str, Any] | None:
     """Counts and the newest upload of the latest snapshot, for the detail page."""
     evidence = entry.latest_evidence
@@ -150,20 +114,6 @@ def evidence_view(entry: ChannelEntry) -> dict[str, Any] | None:
         "shorts_count": evidence.shorts_count,
         "newest_upload": max((v.published_at for v in evidence.videos), default=None),
     }
-
-
-def _blank(value: str | None) -> str | None:
-    """Query/form value with empty meaning absent."""
-    value = (value or "").strip()
-    return value or None
-
-
-def _is_htmx(request: Request) -> bool:
-    """An htmx partial request; a history restore wants the full page."""
-    return (
-        request.headers.get("hx-request") == "true"
-        and request.headers.get("hx-history-restore-request") != "true"
-    )
 
 
 def _origin_ok(request: Request) -> bool:
@@ -185,10 +135,6 @@ def allowed_host_names(bind_host: str | None) -> frozenset[str]:
     return LOOPBACK_HOSTS | {_canonical(bind_host.strip().strip("[]"))}
 
 
-class FormError(ValueError):
-    """Form or query input the user has to correct; the message is shown to them."""
-
-
 def parse_review(reviewer: str, verdict: str, notes: str) -> Review:
     """A human ``Review`` from form fields; ``FormError`` says what to correct."""
     reviewer = reviewer.strip()
@@ -204,7 +150,7 @@ def parse_review(reviewer: str, verdict: str, notes: str) -> Review:
                 "reviewer": reviewer,
                 "role": "human",
                 "verdict": verdict,
-                "notes": _blank(notes),
+                "notes": blank(notes),
             }
         )
     except ValidationError as e:
@@ -216,9 +162,9 @@ def parse_filters(
 ) -> dict[str, str | None]:
     """Queue filters with empty meaning absent; ``FormError`` on an unknown value."""
     filters = {
-        "status": _blank(status),
-        "kind": _blank(kind),
-        "language": _blank(language),
+        "status": blank(status),
+        "kind": blank(kind),
+        "language": blank(language),
     }
     allowed = {"status": STATUSES, "kind": KINDS, "language": LANGUAGES}
     for key, value in filters.items():
@@ -226,10 +172,6 @@ def parse_filters(
             msg = f"Unknown {key} filter '{value}'"
             raise FormError(msg)
     return filters
-
-
-def _text(status_code: int, message: str) -> Response:
-    return Response(message, status_code, media_type="text/plain")
 
 
 def _install_guard(app: FastAPI, allowed_hosts: frozenset[str]) -> None:
@@ -241,47 +183,14 @@ def _install_guard(app: FastAPI, allowed_hosts: frozenset[str]) -> None:
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         if host_name(request.headers.get("host", "")) not in allowed_hosts:
-            return _text(HTTPStatus.BAD_REQUEST, "Bad Host header")
+            return text_response(HTTPStatus.BAD_REQUEST, "Bad Host header")
         if request.method not in SAFE_METHODS and not _origin_ok(request):
-            return _text(HTTPStatus.FORBIDDEN, "Cross-site request refused")
+            return text_response(HTTPStatus.FORBIDDEN, "Cross-site request refused")
         return await call_next(request)
 
 
-class _Pages:
-    """Template rendering shared by the routes."""
-
-    def __init__(self, default_reviewer: str | None):
-        self.templates = _templates()
-        self.default_reviewer = default_reviewer
-
-    def render(
-        self,
-        request: Request,
-        name: str,
-        context: dict[str, Any],
-        status_code: int = 200,
-    ) -> HTMLResponse:
-        return self.templates.TemplateResponse(
-            request, name, context, status_code=status_code
-        )
-
-    def error(self, request: Request, status_code: int, message: str) -> Response:
-        """The error page; for an htmx request just the message as plain text,
-        which ``review.js`` shows in the ``role="alert"`` region."""
-        if _is_htmx(request):
-            return _text(status_code, message)
-        context = {"status_code": status_code, "message": message}
-        return self.render(request, "error.html", context, status_code)
-
-    def reviewer_prefill(self, request: Request) -> str:
-        """The server default (``--reviewer``) if set, else the last reviewer name
-        used in this browser. The default wins so a name left in the browser by an
-        earlier session (e.g. a QA run) can't silently replace the one the server
-        was started with."""
-        if self.default_reviewer:
-            return self.default_reviewer
-        cookie = request.cookies.get(REVIEWER_COOKIE)
-        return unquote(cookie) if cookie else ""
+class _Pages(Pages):
+    """Rendering plus the channel detail page's context."""
 
     def detail_context(
         self,
@@ -313,6 +222,10 @@ def _install_error_handlers(app: FastAPI, pages: _Pages) -> None:
     async def not_found(request: Request, exc: ChannelNotFoundError) -> Response:
         return pages.error(request, HTTPStatus.NOT_FOUND, str(exc))
 
+    @app.exception_handler(VideoNotFoundError)
+    async def no_video(request: Request, exc: VideoNotFoundError) -> Response:
+        return pages.error(request, HTTPStatus.NOT_FOUND, str(exc))
+
     @app.exception_handler(ChannelStoreError)
     async def store_error(request: Request, exc: ChannelStoreError) -> Response:
         return pages.error(request, HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
@@ -320,17 +233,6 @@ def _install_error_handlers(app: FastAPI, pages: _Pages) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
         return pages.error(request, exc.status_code, str(exc.detail))
-
-
-def _remember_reviewer(response: Response, reviewer: str) -> None:
-    response.set_cookie(
-        REVIEWER_COOKIE,
-        quote(reviewer),
-        max_age=COOKIE_MAX_AGE,
-        path="/",
-        httponly=True,
-        samesite="strict",
-    )
 
 
 def _install_player(
@@ -381,6 +283,7 @@ def create_app(
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
 
     _install_player(app, store, stages_dir, reviews)
+    install_video_routes(app, pages, store, reviews, stages_dir)
 
     @app.get("/")
     async def index() -> RedirectResponse:
@@ -416,7 +319,7 @@ def create_app(
             "kinds": KINDS,
             "languages": LANGUAGES,
         }
-        name = "_queue_table.html" if _is_htmx(request) else "queue.html"
+        name = "_queue_table.html" if is_htmx(request) else "queue.html"
         response = pages.render(request, name, context)
         response.headers["Vary"] = "HX-Request"
         return response
@@ -437,7 +340,7 @@ def create_app(
         notes: Annotated[str, Form()] = "",
     ) -> Response:
         entry = store.get(slug)  # 404 before anything else
-        htmx = _is_htmx(request)
+        htmx = is_htmx(request)
         try:
             review = parse_review(reviewer, verdict, notes)
         except FormError as e:
@@ -455,7 +358,7 @@ def create_app(
             response = RedirectResponse(
                 f"/channels/{slug}", status_code=HTTPStatus.SEE_OTHER
             )
-        _remember_reviewer(response, review.reviewer)
+        remember_reviewer(response, review.reviewer)
         return response
 
     return app

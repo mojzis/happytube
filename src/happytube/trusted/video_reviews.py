@@ -17,7 +17,7 @@ hides it too (it might be the one saying ``unsuitable``).
 """
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -198,7 +198,7 @@ class VideoReviewStore:
         return states
 
 
-def hidden_ids(states: dict[str, ReviewState]) -> frozenset[str]:
+def hidden_ids(states: Mapping[str, ReviewState]) -> frozenset[str]:
     """Videos a human review keeps out of the player (selection rule 4)."""
     return frozenset(video_id for video_id, s in states.items() if s.hidden)
 

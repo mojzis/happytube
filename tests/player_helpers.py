@@ -11,6 +11,7 @@ DAY = date(2026, 10, 20)
 PLAYER_BARE = "/player"
 PLAYER = PLAYER_BARE + "/"
 PLAYER_JSON = PLAYER + "videos.json"
+ASSESSED_AT = "2026-10-27T12:00:00Z"
 
 
 def vid(n: int) -> str:
@@ -28,12 +29,17 @@ def assess_fm(n: int, **over) -> dict:
         "duration_s": 600,
         "calm": 5,
         "happy": 4,
+        "flags": [],
+        "note": "Calm.",
         "suitable": True,
+        "rubric_version": 1,
+        "assessed_at": ASSESSED_AT,
     } | over
 
 
 def write(stages: Path, stage: StageName, n: int, fm: dict, day: date = DAY) -> Path:
-    return TrustedStage(stage, stages).write(day, vid(n), MarkdownFile(fm, "body"))
+    body = f"# {fm.get('title')}\n\nOriginal text {n}."
+    return TrustedStage(stage, stages).write(day, vid(n), MarkdownFile(fm, body))
 
 
 def write_shown(stages: Path, slug: str, n: int = 1, text="Calm giraffes.") -> None:

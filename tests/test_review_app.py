@@ -5,7 +5,6 @@ import yaml
 
 from happytube.channels.store import ChannelStore
 from happytube.review.app import (
-    REVIEWER_COOKIE,
     FormError,
     allowed_host_names,
     host_name,
@@ -13,6 +12,7 @@ from happytube.review.app import (
     is_wildcard,
     parse_filters,
 )
+from happytube.review.pages import REVIEWER_COOKIE
 from tests.review_helpers import (
     BASE_URL,
     QUEUE,
