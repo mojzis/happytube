@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from happytube.cli.channels import channels
 from happytube.config.config_manager import ConfigManager
 from happytube.config.settings import get_settings
 from happytube.models.video import MAX_HAPPINESS, MIN_HAPPINESS
@@ -561,6 +562,9 @@ def status(date: str | None):
     console.print(
         "\n[dim]Tip: Use 'happytube run-all' to run the complete pipeline[/dim]"
     )
+
+
+cli.add_command(channels)
 
 
 if __name__ == "__main__":
