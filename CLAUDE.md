@@ -49,8 +49,8 @@ happytube channels list [--status candidate|approved|rejected] [--kind zoo] \
     [--language cs] [--needs-human-review] [--json]
 happytube channels show bbc-earth [--json]
 happytube channels add "Zoo Zlín" --kind zoo --language cs [--handle @…] \
-    [--channel-id UC…] [--url …] [--slug …] [--notes …] --added-by matous [--json]
-happytube channels review bbc-earth --reviewer matous --role human \
+    [--channel-id UC…] [--url …] [--slug …] [--notes …] --added-by mojzis [--json]
+happytube channels review bbc-earth --reviewer mojzis --role human \
     --verdict approve|reject|unsure [--notes …] [--json]
 happytube channels resolve [SLUG…] [--all] [--verify] [--json]  # needs YTKEY
 happytube channels evidence [SLUG…] [--all] [--max-videos 50] [--json]  # needs YTKEY
@@ -95,8 +95,8 @@ page (channel, latest evidence, latest vet, all reviews) and an approve / reject
 unsure form. It needs **no API keys** and writes the same review files as
 `channels review` (always `role: human`) into the registry — commit and push them
 yourself; the app runs no git. `--channels-dir` is the same option and env as the
-`channels` group; `--reviewer` / `HAPPYTUBE_REVIEWER` prefills the form when the
-browser has no remembered name. Only loopback `Host` headers and same-origin POSTs
+`channels` group; `--reviewer` / `HAPPYTUBE_REVIEWER` prefills the form (it beats the
+name the browser remembers). Only loopback `Host` headers and same-origin POSTs
 are accepted; a non-loopback `--host` (LAN IPv4/IPv6) warns (no auth), a wildcard
 `0.0.0.0` / `::` is refused. htmx is vendored in
 `review/static/`, no external JS/CSS.
@@ -257,7 +257,7 @@ channels/
 └── bbc-earth/
     ├── channel.yaml                    # metadata by `channels add`; resolve fills a null channel_id
     ├── reviews/                        # append-only, one file per review
-    │   └── 20261028T101500Z-matous.yaml
+    │   └── 20261028T101500Z-mojzis.yaml
     ├── evidence/                       # append-only API snapshots (stats + recent uploads)
     │   └── 20261028T185312Z.yaml
     └── vet/                            # append-only agent vet reports (frontmatter + markdown)
@@ -325,7 +325,7 @@ Required environment variables in `.env`:
 # API Keys (required)
 YTKEY=your_youtube_api_key              # YouTube Data API v3 key
 ANTHROPIC_API_KEY=your_anthropic_key    # Claude API key (assess, enhance, channels vet)
-HAPPYTUBE_REVIEWER=matous               # optional: prefills the review UI's reviewer
+HAPPYTUBE_REVIEWER=mojzis               # optional: prefills the review UI's reviewer
 
 # Optional settings
 LOG_LEVEL=INFO                          # DEBUG, INFO, WARNING, ERROR, CRITICAL

@@ -259,9 +259,14 @@ class _Pages:
         return self.render(request, "error.html", context, status_code)
 
     def reviewer_prefill(self, request: Request) -> str:
-        """Last reviewer name used in this browser, else the server default."""
+        """The server default (``--reviewer``) if set, else the last reviewer name
+        used in this browser. The default wins so a name left in the browser by an
+        earlier session (e.g. a QA run) can't silently replace the one the server
+        was started with."""
+        if self.default_reviewer:
+            return self.default_reviewer
         cookie = request.cookies.get(REVIEWER_COOKIE)
-        return unquote(cookie) if cookie else (self.default_reviewer or "")
+        return unquote(cookie) if cookie else ""
 
     def detail_context(
         self,
@@ -319,8 +324,8 @@ def create_app(
     default_reviewer: str | None,
     bind_host: str | None = None,
 ) -> FastAPI:
-    """The review app over ``store``. ``default_reviewer`` prefills the form when
-    the browser has no reviewer cookie. ``bind_host`` is the ``--host`` served on;
+    """The review app over ``store``. ``default_reviewer`` prefills the form; without
+    it, the browser's reviewer cookie does. ``bind_host`` is the ``--host`` served on;
     a non-loopback one is also accepted in the ``Host`` header."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     pages = _Pages(default_reviewer)

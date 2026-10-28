@@ -403,8 +403,15 @@ def test_reviewer_prefilled_from_default(store):
     assert 'name="reviewer" value="babička-helper"' in html.text
 
 
-def test_reviewer_cookie_beats_default(store):
+def test_reviewer_default_beats_cookie(store):
     app = client(store, default_reviewer="babička-helper")
+    _post(app, reviewer="QA Tester")  # TestClient keeps the cookie
+    html = app.get(detail_url("ct-decko")).text
+    assert 'name="reviewer" value="babička-helper"' in html
+
+
+def test_reviewer_cookie_used_without_default(store):
+    app = client(store)
     _post(app, reviewer="Matouš")  # TestClient keeps the cookie
     assert 'name="reviewer" value="Matouš"' in app.get(detail_url("ct-decko")).text
 

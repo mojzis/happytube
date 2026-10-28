@@ -25,7 +25,7 @@ _Updated 2026-10-28._
 ## Next step
 
 1. **User (content):** human reviews, now in the browser:
-   `uv run happytube serve --reviewer matous` → http://127.0.0.1:8000. Work the
+   `uv run happytube serve --reviewer mojzis` → http://127.0.0.1:8000. Work the
    *Needs human review* section. Then commit + push `channels/` (the app doesn't run
    git). Open questions: ct-decko, zoo-zlin handles; national-park-service (identity
    yes, content mostly panels); zoo-dvur-kralove / smithsonian inactive.

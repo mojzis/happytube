@@ -13,8 +13,10 @@ stack chosen in 0006, writing the same review records as the CLI (0002, 0003).
 ## Decision
 
 - **Reviewer identity: a field, remembered.** The review form has a required
-  reviewer name, prefilled from a cookie (the last name used in this browser), else
-  from `serve --reviewer` / `HAPPYTUBE_REVIEWER`, else empty. Web reviews are always
+  reviewer name, prefilled from `serve --reviewer` / `HAPPYTUBE_REVIEWER`, else
+  from a cookie (the last name used in this browser), else empty. (Amended
+  2026-10-28: the cookie used to win, so a QA run's name was prefilled over the
+  user's `--reviewer`.) Web reviews are always
   `role: human`; agents use the CLI.
 - **Channels only.** No video review queue in phase 4; the vet's per-video scores are
   shown read-only on the channel page. Video review records come in phase 5.
