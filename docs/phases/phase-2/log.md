@@ -59,3 +59,58 @@
   {"id": "Q6", "issue": "The edited handles match. explore-org is 'Explore Live Nature Cams' (EXPLORE.org description, US, 539k). pbs-nature is 'Nature on PBS' (1.31M). zoo-dvur-kralove is 'Safari Park Dvůr Králové' (CZ, 4.9k), but its newest upload is 2024-08 and the rest date back to 2021; a human should confirm it's the active channel. national-park-service has the official description, 30.5k."}
  ]}
 ```
+
+## Step 3 — fix (verbatim report)
+```json
+{"commit_shas": ["71b8726", "6a89bb6", "5eeaf2f", "604c52d"],
+"fixed": [
+"R3 (Q1): Shorts are now decided by membership of the channel's UUSH playlist (`UUSH` + `channel_id[2:]`). One playlistItems call per channel with maxResults = max_videos. A 404 playlistNotFound means the channel has no Shorts (empty set, source uush). Any other non-stopping error falls back to the duration rule (source duration): 0 < d ≤ 60 before 2024-10-15, ≤ 180 since. Evidence.shorts_source defaults to duration, and a test checks that an old snapshot still loads. build_evidence(short_ids=None) uses the duration rule. FakeYouTube now serves UUSH playlists, a 404 case and a 500 fallback case. Docs updated: 0004, research table (~3N + N/50, 500 channels ≈ 1510), CLAUDE.md, architecture.md.",
+"R1 (Q2): Run.for_slugs pre-fills every requested slug with status `not_fetched`, and Run.stop(index) marks the channel that hit the stop as `error`. Channels resolved but never fetched become `not_fetched`. No more message string comparison. resolve and evidence are tested with 3 slugs, plus a stop at the batched channels call.",
+"R2: set_channel_id now loads the raw YAML mapping and changes only channel_id, keeping key order and not inventing added_at. It checks the result with Channel before writing and refuses an id another slug already holds. It writes a unique mkstemp file in the same directory, checks again that channel_id is still null, then calls os.replace. 0004 notes that comments are lost. Tests cover each case.",
+"Q3: resolve skips channels that already have an id (status `already`, 0 units). `--verify` re-checks them, and only then can a mismatch show up. Help text and docs updated.",
+"R4: YouTubeSettings.youtube_api_key is now a SecretStr; the CLI passes .get_secret_value(). A test checks the key is not in repr.",
+"R5: keyInvalid and accessNotConfigured now stop the run (InvalidKeyError). An uploads-playlist 404 gives a 0-video snapshot. A video without publishedAt or id is skipped.",
+"R6: latest_evidence picks the newest file by name (stem, then collision index, the same helper as before) and parses only that file. A test puts a broken older file in the folder to prove it is never read.",
+"R7: show uses `is None` checks, so 0 subscribers prints as 0 and an unknown duration prints as '?'.",
+"Preexisting: YtQuery.get catches requests.RequestException and raises YouTubeAPIError(status 0, 'no response', exception class name) with no URL, `from None`. Tested."],
+"deviations": [
+"Commit 6a89bb6 (settings SecretStr) leaves cli/channels.py passing a SecretStr until the next commit, 5eeaf2f, fixes it. Only that one intermediate commit is inconsistent; HEAD is fine.",
+"If a channel has 0 uploads, the UUSH call is skipped (saves 1 unit) and shorts_source is recorded as uush."],
+"real_rerun": "skipped: invalid key. The first call (resolving ct-decko) returned 400 API_KEY_INVALID. The run stopped after 1 unit and wrote nothing. All 15 channels were still reported (ct-decko error, the other 14 not_fetched), which shows R1 working on real data. .env and the key were not read or changed.",
+"shorts_after": "Not re-run. Old counts from the duration rule (out of 50): bbc-earth 4, bbc-earth-kids 16, cincinnati-zoo 44, explore-org 31, monterey 33, nat-geo-kids 24, national-geographic 26, national-park-service 24, pbs-nature 40, san-diego-zoo 45, smithsonian 32, zoo-dvur-kralove 47, zoo-praha 33. Expected cost of a re-run: 2 not_found resolves + 1 + 13×3 = 42 units.",
+"unresolved_issues": [
+"YTKEY in .env is still rejected as invalid (probably the stray trailing character). The user must fix it, then run `uv run happytube channels evidence --all` and commit the snapshots.",
+"The 13 committed snapshots still carry the old ≤180 s Shorts flags until that re-run (they are append-only and load as shorts_source: duration).",
+"Handles for ct-decko and zoo-zlin, NPS identity and the Dvůr Králové activity check are still open for the user (out of scope for this fix)."],
+"check_output_tail": "zorilla: 0 findings in 11 files / No clones detected / 0 vulnerabilities / 212 passed in 3.58s / TOTAL 1737 stmts, 69% coverage"}
+```
+
+## 2026-10-28 · orchestrator
+- User: defer content questions; recorded as agent `unsure` reviews on ct-decko,
+  zoo-zlin, national-park-service, zoo-dvur-kralove (296c441) + plan backlog item
+  to auto-flag such cases.
+
+## Step 4 — combined verify (verbatim report)
+```json
+{"items": [
+{"id": "R3/Q1", "status": "resolved", "evidence": "The UUSH set comes from one paginated playlistItems call. A 404 playlistNotFound gives an empty set (uush), a 500 falls back to the duration rule. A probe hitting quota or keyInvalid on the UUSH call stopped the run with exit 1: channel error, the rest not_fetched, nothing written. The date split is checked in UTC: 23:00-05:00 on 10-14 counts as ≥2024-10-15. Old snapshots load as shorts_source=duration."},
+{"id": "R1/Q2", "status": "resolved", "evidence": "Probes with quota=0 on resolve (3 slugs, also --all --verify) list every slug as error or not_fetched with exit 1. A stop at UUSH keeps not_found and no_handle as they were."},
+{"id": "R2", "status": "resolved", "evidence": "Probe: unicode and key order kept. A null id is replaced, added_at is not invented, duplicate id gives ChannelExistsError, mismatch raises. Temp files are cleaned up (only channel.yaml remains)."},
+{"id": "Q3", "status": "resolved", "evidence": "`already` costs 0 units; --verify is tested; CLAUDE.md and 0004 updated."},
+{"id": "R4", "status": "resolved", "evidence": "Key is a SecretStr, read with get_secret_value; repr test."},
+{"id": "R5", "status": "resolved", "evidence": "keyInvalid and accessNotConfigured stop the run (probe). Uploads 404 gives 0 videos. A video missing publishedAt or id returns None and is skipped."},
+{"id": "R6", "status": "resolved", "evidence": "_latest_by_name parses one file; show and list both go through get()→latest_evidence."},
+{"id": "R7", "status": "resolved", "evidence": "test_show_zero_subscribers_and_unknown_duration."},
+{"id": "pre-videos", "status": "resolved", "evidence": "YtQuery.get catches the exception and raises from None with no URL; tested."}],
+"findings": [
+{"id": "V1", "severity": "low", "file": "src/happytube/channels/store.py", "issue": "latest_evidence goes by filename, evidence() by fetched_at. They disagree when a snapshot is hand-copied or renamed. Probe: a file named 2020… holding fetched_at 2027 → latest 2026 vs 2027. Any name that is not a timestamp (e.g. copy.yaml) always wins.", "fix": "Glob only `^\\d{8}T\\d{6}Z(-\\d+)?\\.yaml`, or document that the name is canonical."},
+{"id": "V2", "severity": "low", "file": "src/happytube/channels/collect.py", "issue": "With 0 uploads the UUSH call is skipped but the snapshot says shorts_source=uush. Harmless (nothing to flag), but not literally true.", "fix": "Document it in 0004, or record duration."},
+{"id": "V3", "severity": "low", "file": "src/happytube/channels/collect.py", "issue": "Placeholders from Run.for_slugs carry handle/channel_id=null even for channels whose id is known (bbc-earth). Channels that would have been no_handle (0 units) show as not_fetched.", "fix": "Fill handle and channel_id from channel.yaml when building the placeholders."},
+{"id": "V4", "severity": "low", "file": "src/happytube/channels/store.py", "issue": "The duplicate check parses every channel.yaml on each write, O(N²) for resolve --all. One broken unrelated channel.yaml blocks every write. An unquoted added_at is rewritten as `2026-10-28 17:56:19+00:00` (still loads).", "fix": "Acceptable for now. Later: build one id index per run."},
+{"id": "V5", "severity": "low", "file": "tests/test_cli_channels_youtube.py", "issue": "No test for quota or invalid key during the UUSH call (checked by hand only). Batched channels YouTubeError and 'no channel returned' paths are uncovered (collect.py 242-245, 249-251).", "fix": "Add the tests."},
+{"id": "V6", "severity": "low", "file": "commit 6a89bb6", "issue": "In this commit the CLI passes a SecretStr as the key: the API rejects it, nothing leaks. Only bisect is affected.", "fix": "Squash 6a89bb6 into 5eeaf2f before merging, or squash-merge the PR."}],
+"check": "poe check exit 0 at 604c52d: ruff, ty, zorilla 0, biston no clones, pysentry 0 vulns, 212 passed (183 before), coverage 69% (was 68%). Quota maths in the docs is right (151/604/1510). Wording nit: 0004 says 'one page' of UUSH, but max_videos>50 paginates; the code handles it. The worktree has been removed. The main checkout is now at 296c441 (data and plan only).",
+"verdict": "ship"}
+```
+- Orchestrator: `ship`. V1–V5 → backlog; V6 → squash-merge the PR. Real re-run with
+  UUSH Shorts pending a valid key in `.env`.
