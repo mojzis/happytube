@@ -5,7 +5,6 @@ click. The Claude call and the run over several channels live in
 ``channels/vet_run.py``.
 """
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import yaml
@@ -23,9 +22,9 @@ from happytube.channels.models import (
     VetUsage,
     VetVideo,
 )
+from happytube.claude import Prompt
 from happytube.rubric import RUBRIC, Score, VideoScore, is_suitable
 
-MODEL = "claude-opus-5-5"
 PROMPT_VERSION = 1
 REVIEWER = "claude-vet"
 INACTIVE_AFTER = timedelta(days=365)
@@ -53,12 +52,6 @@ class VetOutput(BaseModel):
 
 class VetOutputError(ValueError):
     """The model's output does not fit the videos it was sent."""
-
-
-@dataclass(frozen=True)
-class Prompt:
-    system: str
-    user: str
 
 
 def long_form(evidence: Evidence) -> list[EvidenceVideo]:

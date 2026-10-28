@@ -11,19 +11,15 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal, Protocol
 
 import anthropic
-from anthropic.types.beta import BetaContentBlock, BetaJSONOutputFormatParam
-from pydantic import ValidationError
 
 from happytube.channels.models import (
     Channel,
     ChannelFlag,
     Evidence,
     Verdict,
-    VetUsage,
 )
 from happytube.channels.store import ChannelStore, derive_status
 from happytube.channels.vet import (
-    MODEL,
     Prompt,
     VetOutput,
     VetOutputError,
@@ -34,24 +30,23 @@ from happytube.channels.vet import (
     render_report,
     review_for,
 )
+from happytube.claude import (
+    MODEL,
+    ClaudeCaller,
+    ClaudeCallError,
+    ClaudeError,
+    ClaudeStoppingError,
+    Reply,
+    estimate_usd,
+    output_format,
+)
 
-# Claude Opus 5.5 list prices, USD per million tokens. Estimates only: input is
-# counted at the base rate even when served from cache, and a call the refusal
-# fallback answered with another model is still priced at Opus 5.5 rates.
-USD_PER_MTOK_INPUT = 4.0
-USD_PER_MTOK_OUTPUT = 20.0
-MAX_TOKENS = 16000
-EFFORT = "medium"
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
-# Structured output: the SDK moves what the API cannot enforce (score 1-5) into
-# the descriptions; ``VetOutput.model_validate_json`` checks it on our side.
-OUTPUT_FORMAT = BetaJSONOutputFormatParam(
-    type="json_schema", schema=anthropic.transform_schema(VetOutput)
-)
-_STOPPING_TYPES = frozenset(
-    {"authentication_error", "permission_error", "billing_error"}
-)
-_STOPPING_STATUS = frozenset({401, 402, 403})
+# The shared call (``happytube.claude``) under the names vet has always used.
+OUTPUT_FORMAT = output_format(VetOutput)
+VetError = ClaudeError
+VetCallError = ClaudeCallError
+VetStoppingError = ClaudeStoppingError
+VetReply = Reply[VetOutput]
 _NOT_VETTED = "not vetted: run stopped (Anthropic key, permission or credit problem)"
 
 VetStatus = Literal[
@@ -67,133 +62,18 @@ VetStatus = Literal[
 FAILURE_STATUSES: frozenset[str] = frozenset({"refused", "error", "not_vetted"})
 
 
-def estimate_usd(input_tokens: int, output_tokens: int) -> float:
-    return round(
-        (input_tokens * USD_PER_MTOK_INPUT + output_tokens * USD_PER_MTOK_OUTPUT)
-        / 1_000_000,
-        4,
-    )
-
-
-class VetError(Exception):
-    """A vet call failed without a response (nothing to bill or record)."""
-
-
-class VetCallError(VetError):
-    """One call failed (after the SDK's retries); the run goes on."""
-
-
-class VetStoppingError(VetError):
-    """The key, its permissions or the credit balance failed; the run stops."""
-
-
-@dataclass
-class VetReply:
-    """What one call returned. ``model`` is the model that answered (the refusal
-    fallback may have switched it). ``output`` is ``None`` on a refusal (then
-    ``refusal_category``) or when the output is unusable (then ``error``); the
-    tokens were paid for either way."""
-
-    output: VetOutput | None
-    model: str
-    usage: VetUsage
-    stop_reason: str | None
-    refusal_category: str | None = None
-    error: str | None = None
-
-
 class VetClient(Protocol):
     def vet(self, prompt: Prompt) -> VetReply: ...
 
 
-def _error_detail(error: anthropic.APIStatusError) -> tuple[str, str]:
-    """The API's error type and message — never headers or the request."""
-    body = error.body if isinstance(error.body, dict) else {}
-    detail = body.get("error")
-    if not isinstance(detail, dict):
-        detail = {}
-    kind = detail.get("type") or type(error).__name__
-    return str(kind), str(detail.get("message") or "")
-
-
-def _call_error(error: anthropic.APIStatusError) -> VetError:
-    """``VetStoppingError`` for a bad key, missing permission or no credit;
-    ``VetCallError`` for anything else (rate limits and 5xx after retries)."""
-    kind, message = _error_detail(error)
-    text = f"Anthropic API {error.status_code} {kind}: {message}".rstrip(": ")
-    # A low credit balance comes back as 400 invalid_request_error, so only its
-    # message tells it apart from a bad request.
-    stopping = (
-        error.status_code in _STOPPING_STATUS
-        or kind in _STOPPING_TYPES
-        or "credit balance" in message.lower()
-    )
-    return VetStoppingError(text) if stopping else VetCallError(text)
-
-
-def _answer_text(content: list[BetaContentBlock]) -> str:
-    """The text of the answer: text blocks after the last ``fallback`` block
-    (non-streaming responses already drop a declined partial; this is a guard)."""
-    texts: list[str] = []
-    for block in content:
-        if block.type == "fallback":
-            texts = []
-        elif block.type == "text":
-            texts.append(block.text)
-    return "".join(texts)
-
-
 class AnthropicVetClient:
-    """``VetClient`` on the Anthropic API: Claude Opus 5.5, adaptive thinking
-    (the model's default), effort ``medium``, structured output, and the
-    server-side refusal fallback."""
+    """``VetClient`` on the shared Claude call (``happytube.claude``)."""
 
     def __init__(self, api_key: str, client: anthropic.Anthropic | None = None):
-        self._client = client or anthropic.Anthropic(api_key=api_key, max_retries=3)
+        self._caller = ClaudeCaller(api_key, client)
 
     def vet(self, prompt: Prompt) -> VetReply:
-        try:
-            response = self._client.beta.messages.create(
-                model=MODEL,
-                max_tokens=MAX_TOKENS,
-                system=[
-                    {
-                        "type": "text",
-                        "text": prompt.system,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                messages=[{"role": "user", "content": prompt.user}],
-                output_config={"effort": EFFORT, "format": OUTPUT_FORMAT},
-                betas=[FALLBACK_BETA],
-                fallbacks="default",
-            )
-        except anthropic.APIStatusError as e:
-            raise _call_error(e) from None
-        except anthropic.APIConnectionError as e:
-            msg = f"Anthropic API unreachable: {type(e).__name__}"
-            raise VetCallError(msg) from None
-        usage = response.usage
-        tokens = VetUsage(
-            input_tokens=usage.input_tokens
-            + (usage.cache_creation_input_tokens or 0)
-            + (usage.cache_read_input_tokens or 0),
-            output_tokens=usage.output_tokens,
-        )
-        stop = response.stop_reason
-        if stop == "refusal":
-            details = response.stop_details
-            category = details.category if details else None
-            return VetReply(None, response.model, tokens, stop, category)
-        if stop == "max_tokens":
-            error = f"output cut off at max_tokens ({MAX_TOKENS})"
-            return VetReply(None, response.model, tokens, stop, error=error)
-        try:
-            output = VetOutput.model_validate_json(_answer_text(response.content))
-        except ValidationError as e:  # not JSON, or e.g. a score outside 1-5
-            error = f"model output did not parse ({e.error_count()} problems)"
-            return VetReply(None, response.model, tokens, stop, error=error)
-        return VetReply(output, response.model, tokens, stop)
+        return self._caller.call(prompt, VetOutput)
 
 
 @dataclass

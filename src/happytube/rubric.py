@@ -34,6 +34,10 @@ MIN_HAPPY = 3
 
 Score = Annotated[int, Field(ge=1, le=5)]
 
+# Bump when the RUBRIC text or the suitability rule changes; stored with every
+# trusted assessment so scores from different rubric versions can be told apart.
+RUBRIC_VERSION = 1
+
 RUBRIC = """\
 Audience: an elderly viewer with early dementia. She is easily frightened, \
 confused by fast or loud content, and scared by war news. She watches in Czech \
