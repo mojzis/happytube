@@ -121,3 +121,19 @@ branch; merge only after the user says so.
 - vulture ignores for FastAPI decorators / QueueSections fields are global names;
   a whitelist file would be tighter.
 - Port probe before uvicorn has a tiny race (uvicorn's own error still covers it).
+
+## Backlog (from phase 5a, not scheduled)
+
+- 5b must read calm/happy/suitable from assess and only `enhanced_description` from
+  enhance (a video re-scored suitable keeps an enhance file with stale scores).
+- V1: `trusted run` missing-key message suggests `--dry-run` (run has none); run
+  needs the key even when nothing is pending.
+- V2: `load_until` accepts date dirs like `20261028` / `2026-W44-3`; require
+  `day.isoformat() == name`.
+- V3: every run parses all past stage files; select by stem, load only the todo list.
+- V4: `run` abort message duplicates `_failure`, omits earlier failed steps.
+- V5: table test for `pending` (same id on two dates, force, earlier skipped).
+- `skipped` counts only the target date; label should say so.
+- A failed / refused assess batch is re-paid on every rerun (no retry cap).
+- Fetch window compares UTC published date with local `--date`.
+

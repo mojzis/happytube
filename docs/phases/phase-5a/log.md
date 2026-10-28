@@ -106,3 +106,31 @@ Commits 72e865d..5ab4997 (4). 456 passed, coverage 82%, poe check green.
   under --force); `skipped` counts only target date; fetch_trusted(channels, …).
 - unresolved: re-scored-suitable video keeps old enhance file with stale scores in
   frontmatter (readers should take scores from assess).
+
+## 4 — verify
+Verdict `ship`. poe check green (456, 82%). All of R1–R6, Q1–Q3 and both promoted
+items resolved, with evidence: two-day CLI run with fakes (D: earth fetch 500 + zoo
+batch fail → exit 1, sea assessed+enhanced; D+1 exit 0, leftovers assessed under D,
+rerun 0 calls); R2 deletion only the re-scored video; R3 no key → exit 1, empty
+stdout, no stages/, no HTTP; `--help` of channels/serve identical before/after;
+daily_run.sh from another cwd with stub uv.
+
+- deviations judged: nothing swallowed by continue-past-errors; cross-date enhance
+  delete correct; same id on two dates only by hand; `skipped` label should say
+  "this date"; stale scores in enhance after re-score → fine, **5b readers take
+  calm/happy/suitable from assess, only enhanced_description from enhance**.
+- V1 low — `run` missing-key message says "(try --dry-run)", run has none; run
+  needs the key even with nothing pending.
+- V2 low — `load_until` accepts dir names like `20261028` / `2026-W44-3` (fromisoformat).
+- V3 low — every run parses every past file; identity frontmatter vs stem mismatch
+  would re-pay.
+- V4 low — abort message duplicated / clumsy, omits earlier failed steps.
+- V5 low — no direct table test for `pending` edge cases.
+
+## 5 — orchestrator real probe
+Scratch copy, real keys. `trusted fetch san-diego-zoo cincinnati-zoo`: 7 new, 76
+Shorts by UUSH, 2 live/upcoming, 6 units, exit 0. `assess`: 7 scored, 5 suitable,
+opus-5-5, $0.03. `enhance`: 5 calls, $0.02. `status` coherent (7/7/5/5). Eyeball:
+giraffe birth-watch and vet-tech videos 4/4 suitable; press-style livestream
+announcement calm 3 → unsuitable; raptor podcast (hunting talk) happy 3 →
+unsuitable. Enhanced description plain, no links. Nothing committed from scratch.
