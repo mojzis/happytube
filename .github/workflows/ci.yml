@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # One step per check so a failure shows which one, and none masks another.
+      - name: Format
+        run: uv run ruff format --check .
+      - name: Lint (ruff, incl. S security rules)
+        run: uv run ruff check .
+      - name: Type check (ty)
+        if: ${{ !cancelled() }}
+        run: uv run ty check
+      - name: Test lint (zorilla)
+        if: ${{ !cancelled() }}
+        run: uv run zorilla check .
+      - name: Clones (biston)
+        if: ${{ !cancelled() }}
+        run: uv run biston scan .
+      - name: Tests
+        if: ${{ !cancelled() }}
+        run: uv run pytest -q --tb=short
+      - name: Dependency vulnerabilities (advisory)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: uvx pysentry-rs .

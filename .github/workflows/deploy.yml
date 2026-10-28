@@ -1,10 +1,9 @@
 name: Deploy HappyTube to GitHub Pages
 
+# Auto-deploy on push is paused: the export reads legacy data/fetched/ and yields
+# 0 videos. Re-add `push: branches: [main]` once the player reads stages/.
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # manual trigger only
 
 permissions:
   contents: read
