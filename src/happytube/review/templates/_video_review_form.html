@@ -1,6 +1,7 @@
 <form class="review-form" method="post" action="/videos/{{ a.video_id }}/reviews"
       hx-post="/videos/{{ a.video_id }}/reviews" hx-target="#reviews" hx-swap="outerHTML">
   <h3>Your spot-check</h3>
+  <input type="hidden" name="assessed_at" value="{{ video.call_token }}">
   <p class="error-message htmx-error" role="alert" hidden></p>
   {% if error %}<p class="error-message" role="alert">{{ error }}</p>{% endif %}
   <label>Reviewer

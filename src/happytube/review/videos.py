@@ -50,6 +50,12 @@ SECTION_TITLES = {
 }
 
 
+RESCORED = (
+    "The agent re-scored this video since the page was loaded; reload it to see "
+    "the current call, then save again."
+)
+
+
 def parse_video_review(  # noqa: PLR0913 - one parameter per form field
     video: SpotVideo,
     reviewer: str,
@@ -57,9 +63,13 @@ def parse_video_review(  # noqa: PLR0913 - one parameter per form field
     flags: list[str],
     watched: str,
     notes: str,
+    call: str | None = None,
 ) -> VideoReview:
     """A human review of ``video`` from form fields; ``FormError`` says what to
-    correct."""
+    correct. ``call`` is the page's ``call_token``: a different one means the
+    snapshot would not be the call the reviewer saw (absent: not checked)."""
+    if call is not None and call != video.call_token:
+        raise FormError(RESCORED)
     reviewer = reviewer.strip()
     if not reviewer:
         msg = "Enter your name as reviewer."
@@ -172,13 +182,14 @@ def install_video_routes(
         watched: Annotated[str, Form()] = "",
         notes: Annotated[str, Form()] = "",
         flags: Annotated[list[str] | None, Form()] = None,
+        assessed_at: Annotated[str | None, Form()] = None,
     ) -> Response:
         video = get(video_id)  # 404 before anything else
         htmx = is_htmx(request)
         chosen = flags or []
         try:
             review = parse_video_review(
-                video, reviewer, verdict, chosen, watched, notes
+                video, reviewer, verdict, chosen, watched, notes, assessed_at
             )
         except FormError as e:
             form = {

@@ -193,6 +193,26 @@ def test_shown_video_with_incomplete_assess_can_be_hidden(incomplete):
     assert vid(4) not in shown(client)
 
 
+def test_post_with_the_page_call_token_is_saved(setup):
+    client, reviews = setup
+    assert (
+        'name="assessed_at" value="2026-10-27T12:00:00Z"'
+        in client.get(video_url(1)).text
+    )
+    data = form(assessed_at="2026-10-27T12:00:00Z")
+    assert client.post(post_url(1), data=data, headers=HTMX).status_code == 200
+    assert len(list((reviews.root / vid(1)).iterdir())) == 1
+
+
+def test_post_after_a_rescore_is_422_and_writes_nothing(setup):
+    client, reviews = setup
+    response = client.post(
+        post_url(1), data=form(assessed_at="2026-10-01T00:00:00Z"), headers=HTMX
+    )
+    assert (response.status_code, "re-scored" in response.text) == (422, True)
+    assert not (reviews.root / vid(1)).exists()
+
+
 def test_later_human_suitable_shows_it_again(setup):
     client, _ = setup
     client.post(post_url(1), data=form())

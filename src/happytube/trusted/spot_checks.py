@@ -52,6 +52,7 @@ from happytube.trusted.video_reviews import (
     VideoReviewStore,
     agreement,
 )
+from happytube.utils import iso_z
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,13 @@ class SpotVideo:
         """The agent's call was redone since the deciding review was given."""
         latest = self.latest
         return latest is not None and self.rescored(latest)
+
+    @property
+    def call_token(self) -> str:
+        """Names the agent call on the page (its ``assessed_at``), so a POST can
+        tell the video was rescored since the page was rendered."""
+        at = self.assess.assessed_at
+        return "" if at is None else iso_z(at)
 
     def rescored(self, review: VideoReview) -> bool:
         """``rescored_since`` against this video's current call."""
