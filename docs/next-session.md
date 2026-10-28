@@ -5,8 +5,8 @@ _Updated 2026-10-28._
 ## Where we are
 
 - Plan: `docs/plan.md` (phases 0–5 + backlog).
-- Phases 0, 1 merged (PRs #6, #7). **Phase 2 done** (channel evidence), PR from
-  `phase-2-evidence` — squash-merge (an intermediate commit is broken, V6).
+- Phases 0, 1, 2 merged (PRs #6, #7, #9). **Phase 2 done** (channel evidence);
+  merged with full history — commit 6a89bb6 alone is inconsistent (V6, bisect only).
   - `happytube channels resolve` (handle → channel id, written to channel.yaml only
     when null; `--verify` re-checks) and `channels evidence` (stats + recent
     uploads + durations, append-only snapshots in `channels/<slug>/evidence/`).

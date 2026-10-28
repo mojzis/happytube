@@ -114,7 +114,7 @@ This matched the planned loop in log.md.
   file blocks all writes; unquoted `added_at` reformatted. One id index per run later.
 - V5: tests for quota / invalid key during the UUSH call and the batched-channels
   error paths (`collect.py` 242-245, 249-251).
-- V6: squash-merge the PR (broken intermediate 6a89bb6).
+- V6: broken intermediate 6a89bb6 — merged as-is (user prefers full history over squash).
 - **Real re-run pending**: fix `YTKEY` in `.env` (stray trailing character), then
   `uv run happytube channels evidence --all` (~42 units) and commit the UUSH-based
   snapshots.

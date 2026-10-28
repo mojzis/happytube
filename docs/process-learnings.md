@@ -178,8 +178,9 @@ combined verify, as planned.
 ### Tooling gotchas
 - **The staged-only `ty` hook does not catch cross-file type breakage.** A commit that
   changes a type in one file (settings → `SecretStr`) passes while an unstaged
-  caller breaks. Run `uv run poe typecheck` before each commit of a multi-commit fix,
-  or squash-merge.
+  caller breaks. Run `uv run poe typecheck` before each commit of a multi-commit fix.
+  The user prefers regular merges (full history, imperfect intermediates accepted)
+  over squash-merge.
 - **Secret grep**: plain `git grep AIza` hits the briefs that mention the pattern.
   Use a key-shaped regex (`AIza[0-9A-Za-z_-]{20,}`) over trees and `git log -p`.
 - Tests that build `Settings` read `.env` relative to cwd. Once a real `.env` exists,
@@ -211,5 +212,5 @@ combined verify, as planned.
   for permission to work around it? The rule today: user only.
 - Should the orchestrator itself eyeball real-data output (titles, counts) after
   dev, or is that a QA check by default?
-- Should multi-commit fix steps run full `poe typecheck` per commit, or is
-  squash-merge the accepted answer to broken intermediates?
+- Should multi-commit fix steps run full `poe typecheck` per commit? (Squash-merge is
+  out: the user keeps full history.)
