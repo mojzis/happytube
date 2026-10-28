@@ -30,9 +30,9 @@ The workflow file is located at `.github/workflows/deploy.yml`. It will automati
 
 ### 3. Trigger Deployment
 
-The deployment will automatically run when:
-- You push to the `main` branch
-- You manually trigger it from the Actions tab
+Deployment is **manual only** for now: auto-deploy on push to `main` is paused
+because the export reads legacy `data/fetched/` and yields 0 videos. Re-add the
+`push` trigger in `deploy.yml` once the player reads `stages/`.
 
 To manually trigger:
 1. Go to **Actions** tab in your repository
@@ -83,7 +83,7 @@ To update the videos on your deployed site:
    git push origin main
    ```
 
-3. The workflow will automatically rebuild and redeploy
+3. Trigger the workflow manually (see above) to rebuild and redeploy
 
 ## Troubleshooting
 

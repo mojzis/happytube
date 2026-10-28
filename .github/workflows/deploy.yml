@@ -1,10 +1,9 @@
 name: Deploy HappyTube to GitHub Pages
 
+# Auto-deploy on push is paused: the export reads legacy data/fetched/ and yields
+# 0 videos. Re-add `push: branches: [main]` once the player reads stages/.
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # manual trigger only
 
 permissions:
   contents: read
@@ -21,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.3.3  # no floating major tags since v8
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -39,10 +38,10 @@ jobs:
         run: uv run python -m happytube.web.export
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v6
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: 'src/happytube/web/static'
 
@@ -55,4 +54,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
