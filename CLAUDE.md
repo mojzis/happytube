@@ -52,16 +52,18 @@ happytube channels add "Zoo Zlín" --kind zoo --language cs [--handle @…] \
     [--channel-id UC…] [--url …] [--slug …] [--notes …] --added-by matous [--json]
 happytube channels review bbc-earth --reviewer matous --role human \
     --verdict approve|reject|unsure [--notes …] [--json]
-happytube channels resolve [SLUG…] [--all] [--json]           # needs YTKEY
+happytube channels resolve [SLUG…] [--all] [--verify] [--json]  # needs YTKEY
 happytube channels evidence [SLUG…] [--all] [--max-videos 50] [--json]  # needs YTKEY
 ```
 
 Only `resolve` and `evidence` call YouTube (`YTKEY` only, no Anthropic key); the rest
 need no keys. `resolve` fills a null `channel_id` from the handle (`forHandle`, 1
-unit) and never overwrites a different one (`mismatch`). `evidence` resolves where
-needed, then writes an append-only snapshot per channel (~2 units each); both report
-`quota_units`. A used-up quota or rejected key stops the run, keeping what was
-written. `show` prints the latest snapshot's "resolved to" title — check it, handles
+unit) and skips channels that have one; `--verify` re-checks those, and a different
+id is a `mismatch`, never overwritten. `evidence` resolves where needed, then writes
+an append-only snapshot per channel (~3 units each; Shorts = membership of the
+channel's `UUSH…` playlist, duration fallback, `shorts_source` says which); both
+report `quota_units`. A used-up quota or rejected key stops the run, keeping what was
+written; channels never reached are `not_fetched`. `show` prints the latest snapshot's "resolved to" title — check it, handles
 can hit look-alike channels (decision 0004). `--json` prints plain JSON to stdout
 (errors go to stderr, exit ≠ 0) — agents use that. Registry dir: `--channels-dir` / `HAPPYTUBE_CHANNELS_DIR`,
 default `channels/` at the repo root. Status is derived: the latest *human*
@@ -183,8 +185,8 @@ from the repo root.
   `channels` subgroup.
 - `channels/` — registry `models.py` (`Channel`, `Review`, `Evidence`, `slugify`),
   `store.py` (`ChannelStore`, `derive_status`), `evidence.py` (pure API → `Evidence`
-  builder, Shorts rule) and `collect.py` (resolve / evidence runs); the CLI and the
-  future web UI share them.
+  builder, Shorts by `UUSH` ids or duration) and `collect.py` (resolve / evidence
+  runs); the CLI and the future web UI share them.
 - `youtube.py` — `YouTubeClient` (injectable getter, quota count, key-free errors,
   `QuotaExceededError` / `InvalidKeyError`); `videos.py` — legacy search for fetch.
 - `config/settings.py` (pydantic settings from `.env`), `config/config_manager.py`

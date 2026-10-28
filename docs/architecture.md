@@ -48,7 +48,8 @@ Planned:
 - `channels/<slug>/channel.yaml` and `channels/<slug>/reviews/<UTC stamp>-<reviewer>.yaml`
   — registry and append-only review records in git (decisions 0002, 0003).
 - `channels/<slug>/evidence/<UTC stamp>.yaml` — append-only evidence snapshots:
-  resolved channel, stats, recent uploads with durations and Shorts flag (0004).
+  resolved channel, stats, recent uploads with durations and Shorts flag (`UUSH`
+  playlist membership, duration fallback; 0004).
 - Planned: vet reports (`vet/`) next to `reviews/`.
 
 ## Flows
@@ -57,6 +58,7 @@ Planned:
 - **Player:** `python -m happytube.web.server` locally, or
   `python -m happytube.web.export` → GitHub Pages.
 - **Evidence:** `channels resolve` (handle → channel id, once) → `channels evidence`
-  (stats + latest 50 uploads, ~2 API units per channel) → snapshot in git.
+  (stats + latest 50 uploads + `UUSH` Shorts ids, ~3 API units per channel) →
+  snapshot in git.
 - **Planned review:** add candidate channel → collect evidence → agent vets → human
   approves in the web UI or CLI → fetch reads only approved channels.
