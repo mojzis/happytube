@@ -84,3 +84,11 @@ branch; merge only after the user says so.
   (or `resolve`/`evidence`) should flag unresolved handles, inactive channels
   (newest upload > 12 months) and look-alike channels (low subscribers vs the
   name, as `@NatureonPBS` was) as agent reviews; phase 4 queue shows them first.
+- V1: `latest_evidence` orders by filename, `evidence()` by `fetched_at`; a renamed or
+  hand-copied snapshot makes them disagree. Glob only timestamp names.
+- V2: 0-upload channel records `shorts_source: uush` without a UUSH call.
+- V3: `not_fetched` placeholders carry null handle/channel_id even when known.
+- V4: duplicate-id check parses every channel.yaml per write (O(N²) on `--all`);
+  one broken channel.yaml blocks all writes.
+- V5: tests for quota/invalid key during the UUSH call and the batched-channels
+  error paths (`collect.py`).
