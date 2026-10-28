@@ -42,12 +42,18 @@ A local unauthenticated app that writes files is reachable from any page the use
 browser visits, so:
 
 - **Host check (DNS rebinding):** the `Host` header must be `127.0.0.1`, `localhost`
-  or `[::1]` (any port), or the `--host` the server was started with; else `400`.
+  or `[::1]` (any port), or the `--host` the server was started with (a name, IPv4
+  or IPv6 address — compared canonically via `ipaddress`, IPv6 bracketed in `Host`);
+  else `400`.
 - **Origin check (CSRF):** on every non-GET request an `Origin` header, if present,
   must equal the request's own origin; if absent, `Sec-Fetch-Site`, if present, must
   be `same-origin` or `none`; else `403`. Both checks run before any route, so a
   refused request writes nothing. Clients sending neither (curl) are allowed.
-- `serve --host` other than loopback prints a no-auth warning but is allowed.
+- `serve --host` other than loopback prints a no-auth warning but is allowed. A
+  wildcard bind (`0.0.0.0`, `::`) is refused — no client sends it as `Host`, so it
+  could only 400 everyone: "bind a concrete address (e.g. your LAN IP); there is no
+  auth". A port already in use is a one-line error (the port is probed once before
+  the banner) and exit 1.
 - Jinja autoescape on for every template: names, notes, titles and descriptions are
   untrusted. Links are built only from validated ids (`CHANNEL_ID_PATTERN`; video ids
   matching `[A-Za-z0-9_-]+`); the channel's free-text `url` is shown, not linked.
@@ -59,7 +65,10 @@ browser visits, so:
   from `i.ytimg.com` are the only external requests.
 - The reviewer cookie is `HttpOnly`, `SameSite=Strict`, path `/`, one year.
 - Store errors render as pages: unknown or invalid slug `404`, a broken file `500`
-  with the store's message (it names the file); never a traceback.
+  with the store's message (it names the file); never a traceback. To an htmx
+  request any error (400 / 403 / 404 / 500) is the message as plain text, which
+  `review/static/review.js` puts (as text) into the page's `role="alert"` region —
+  htmx itself swaps nothing on an error; 422 form errors swap the form as before.
 
 ## Consequences
 

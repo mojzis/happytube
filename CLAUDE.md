@@ -97,7 +97,8 @@ unsure form. It needs **no API keys** and writes the same review files as
 yourself; the app runs no git. `--channels-dir` is the same option and env as the
 `channels` group; `--reviewer` / `HAPPYTUBE_REVIEWER` prefills the form when the
 browser has no remembered name. Only loopback `Host` headers and same-origin POSTs
-are accepted; a non-loopback `--host` warns (no auth). htmx is vendored in
+are accepted; a non-loopback `--host` (LAN IPv4/IPv6) warns (no auth), a wildcard
+`0.0.0.0` / `::` is refused. htmx is vendored in
 `review/static/`, no external JS/CSS.
 
 ### Web player
@@ -300,7 +301,7 @@ src/happytube/review/
 ├── app.py              # FastAPI app factory, routes, Host/Origin guard
 ├── queue.py            # pure queue order (queue_sections)
 ├── templates/          # base, queue, channel + partials, error (Jinja, autoescaped)
-└── static/             # htmx.min.js (vendored 2.0.11), review.css
+└── static/             # htmx.min.js (vendored 2.0.11), review.js (htmx errors), review.css
 
 # Web player
 src/happytube/web/
