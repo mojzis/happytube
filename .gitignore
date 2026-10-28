@@ -30,3 +30,10 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# stage data: only the trusted pipeline's is tracked (decision 0010)
+/stages/*
+!/stages/trusted/
+
+# player build product (python -m happytube.web.export)
+src/happytube/web/static/videos.json
