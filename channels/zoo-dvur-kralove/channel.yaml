@@ -3,7 +3,7 @@ name: ZOO Dvůr Králové
 kind: zoo
 languages:
 - cs
-handle: null
+handle: '@zoodvurkralove'
 channel_id: null
 url: null
 added_by: claude-seed

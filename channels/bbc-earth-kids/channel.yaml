@@ -3,7 +3,7 @@ name: BBC Earth Kids
 kind: broadcaster
 languages:
 - en
-handle: null
+handle: '@bbcearthkids'
 channel_id: null
 url: null
 added_by: claude-seed

@@ -3,7 +3,7 @@ name: Monterey Bay Aquarium
 kind: aquarium
 languages:
 - en
-handle: null
+handle: '@MontereyBayAquarium'
 channel_id: null
 url: null
 added_by: claude-seed

@@ -3,7 +3,7 @@ name: Zoo Praha
 kind: zoo
 languages:
 - cs
-handle: null
+handle: '@zoopraha'
 channel_id: null
 url: null
 added_by: claude-seed

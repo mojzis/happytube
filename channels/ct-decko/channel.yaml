@@ -3,7 +3,7 @@ name: ČT :D / Déčko
 kind: broadcaster
 languages:
 - cs
-handle: null
+handle: '@ctdecko'
 channel_id: null
 url: null
 added_by: claude-seed

@@ -3,7 +3,7 @@ name: San Diego Zoo
 kind: zoo
 languages:
 - en
-handle: null
+handle: '@SanDiegoZoo'
 channel_id: null
 url: null
 added_by: claude-seed

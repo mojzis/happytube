@@ -3,7 +3,7 @@ name: Cincinnati Zoo
 kind: zoo
 languages:
 - en
-handle: null
+handle: '@CincinnatiZoo'
 channel_id: null
 url: null
 added_by: claude-seed

@@ -3,7 +3,7 @@ name: explore.org
 kind: other
 languages:
 - en
-handle: null
+handle: '@exploreorg'
 channel_id: null
 url: null
 added_by: claude-seed
