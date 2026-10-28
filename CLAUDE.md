@@ -4,97 +4,127 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-HappyTube is a Python application that analyzes YouTube videos to identify and enhance "happy" content. It fetches videos from YouTube API, uses Claude AI to assess happiness scores, and improves video descriptions for highly-rated content.
+HappyTube finds calm, happy YouTube videos for vulnerable viewers (first audience: a
+grandmother with early dementia). Today it fetches videos from the YouTube Data API,
+scores happiness with Claude, improves descriptions of the happy ones and plays them
+in a recommendation-free player. Next it moves to a human-approved allowlist of
+trusted channels (see Project plan).
+
+## Project plan
+
+- `docs/plan.md` — goal and phases 0–5 (trusted-channels revival).
+- `docs/next-session.md` — where we are and the next step. Read it first.
+- `docs/constitution.md`, `docs/architecture.md`, `docs/decisions/` — purpose,
+  structure and decision records. `docs/research/` holds notes, incl. the historical
+  `modernization-plan.md`.
 
 ## Commands
 
-### CLI Commands (Stage-Based Architecture)
+- `uv run poe check` — run lint (incl. ruff `S` security rules), typecheck, vulns, test-lint, clones, then tests
+- `uv run poe fix` — auto-format and fix lint issues
+- `uv run poe test` — run tests only
+- `uv run poe check-all` — run all checks including dead-code and unused-deps
 
-The project now uses a modern CLI interface with modular stage-based commands:
+### HappyTube CLI
 
 ```bash
-# Run the complete pipeline (recommended for daily use)
-happytube run-all --category Music --max-videos 50
-
-# Run individual stages
+happytube run-all --category Music --max-videos 50     # full pipeline
 happytube fetch --category Music --max-videos 50 --date 2025-11-16
 happytube assess --date 2025-11-16
 happytube enhance --threshold 3 --date 2025-11-16
 happytube report --date 2025-11-16 --days-back 7
-
-# Check pipeline status
 happytube status --date 2025-11-16
-
-# Get help
-happytube --help
-happytube fetch --help
+happytube --help                                       # or <command> --help
 ```
 
-### Development Environment
+Run via `uv run happytube …`. Daily automation: `./scripts/daily_run.sh` (cron-ready).
+
+### Web player
+
 ```bash
-# Install dependencies
+uv run python -m happytube.web.server   # Flask dev server, http://127.0.0.1:5000
+uv run python -m happytube.web.export   # static videos.json for GitHub Pages
+./scripts/deploy_web.sh                 # interactive export + deploy helper
+```
+
+`.github/workflows/deploy.yml` builds and deploys `src/happytube/web/static` to GitHub
+Pages; see [DEPLOYMENT.md](DEPLOYMENT.md). Known gap: the player and export read
+legacy raw JSON from `data/fetched/`, which nothing writes any more (the stages write
+`stages/`), so the export currently yields 0 videos.
+
+## Stack
+
+uv, ruff (lint/format), ty (type check), pytest, poethepoet (task runner). Python
+>=3.12, src layout (`src/happytube/`), hatchling build. Runtime: click, rich, pandas,
+pyarrow, pydantic(-settings), anthropic, requests, flask, jinja2, pyyaml.
+
+## Toolbox
+
+The [aesop toolbox](https://mojzis.github.io/aesop/llms.txt) is wired in here. Every
+tool explains itself — run `uv run <tool> guide` before reaching for flags, and
+`uv run <tool> guide tune` before changing a threshold. Call them as `uv run <tool>`;
+ty-find's binary is `tyf`.
+
+### On every commit
+
+**madoqua** is the only commit hook (`hooks/pre-commit`, `core.hooksPath=hooks`). It
+acts on staged `.py`/`.pyi` files only — a commit without one is a silent no-op, not a
+verified hook.
+
+| phase | steps |
+| --- | --- |
+| fix (rewrites and re-stages) | `ruff check --fix`, `ruff format` |
+| check (blocks) | `ruff check`, `ty check`, `biston scan --focus-args`, `zorilla check`, `gerenuk run` |
+
+Whole hook runs in ~1–2 s here, mostly gerenuk (`uv run madoqua stats` for current
+numbers). Don't commit with `--no-verify` or `MADOQUA_SKIP` to get past a
+check that is telling the truth.
+
+Two changes from the hook this replaced:
+
+- `ty check` was repo-wide, it is now **staged-only**. Repo-wide diagnostics no longer
+  block a clean commit, but a file with existing diagnostics blocks the first commit
+  that touches it. `uv run poe typecheck` still checks everything.
+- **bandit is gone.** Security checks are ruff's flake8-bandit `S` rules, so they now run
+  on commit via `ruff check`; `tests/**` ignores S101/S105/S106 in `per-file-ignores`.
+
+### Every now and then
+
+- `uv run pycoati . --format pretty` — scores every test for suspicion and prints a
+  remediation ladder. Run it before a test-cleanup session. Never put it in a hook or
+  CI: it runs the suite three times. It needs pytest-cov or coverage is silently null.
+
+### On demand — instead of grep
+
+- `uv run tyf find <symbol>` / `tyf refs` / `tyf list <file>` / `tyf calls` — type-aware
+  symbol lookup. **Use these instead of grep** for definitions and references; grep
+  cannot tell a definition from a string that happens to match.
+- `uv run gerenuk audit <file>` — lists symbols in a module that nothing references.
+- `uv run gerenuk impacted-tests` — which tests a working-tree diff reaches, and why.
+
+### Fresh clone
+
+```
 uv sync
-
-# Run the modernized CLI pipeline
-happytube run-all --category Music
-
-# Run the legacy main application (deprecated)
-uv run python -m happytube.main
-
-# Interactive development environment
-./scripts/ip.sh  # or: ipython -i happytube/ip.py
-
-# Run tests
-uv run pytest
-
-# Run specific test file
-uv run pytest tests/test_pipeline.py -v
-
-# Lint code
-uv run ruff check .
-uv run ruff format .
+uv run madoqua install    # once; core.hooksPath is local config, not tracked
 ```
 
-### Daily Automation
-```bash
-# Run the automated daily pipeline
-./scripts/daily_run.sh
+`.python-version` pins 3.12 so the local venv matches CI. A new `git worktree` has no
+`.venv`: run `uv sync` in it before committing, or the madoqua hook blocks with
+"no virtualenv".
 
-# Setup cron job for daily execution at 8 AM
-# crontab -e
-# Add: 0 8 * * * /home/user/happytube/scripts/daily_run.sh >> /home/user/happytube/logs/cron.log 2>&1
+### Refreshing the toolbox
+
+```
+uv lock --refresh --upgrade-package madoqua --upgrade-package gerenuk --upgrade-package biston --upgrade-package zorilla --upgrade-package pycoati --upgrade-package ty-find && uv sync
 ```
 
-### Web Player
-```bash
-# Start the web player for local development (after running main application)
-uv run python -m happytube.web.server
-
-# Access at http://127.0.0.1:5000
-```
-
-### Static Deployment
-```bash
-# Export videos to static JSON for GitHub Pages deployment
-uv run python -m happytube.web.export
-
-# Or use the deployment script (interactive)
-./scripts/deploy_web.sh
-```
-
-### GitHub Pages Deployment
-The project includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically:
-- Builds the static site
-- Exports video data
-- Deploys to GitHub Pages
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full setup instructions.
+`--refresh` matters: without it uv may serve a cached index and miss a release
+published minutes ago.
 
 ## Architecture
 
-### Modern Stage-Based Pipeline
-
-The project has been modernized with a stage-based architecture for better modularity and debugging:
+### Stage-based pipeline
 
 ```
 Stage 1: FETCH    → stages/fetch/YYYY-MM-DD/*.md
@@ -103,64 +133,29 @@ Stage 3: ENHANCE  → stages/enhance/YYYY-MM-DD/*.md (with enhanced_description)
 Stage 4: REPORT   → stages/report/YYYY-MM-DD.html + parquet exports
 ```
 
-**Benefits:**
-- Each stage can be run independently
-- Human-readable markdown files with YAML frontmatter
-- Git-friendly data format
-- Easy to debug and inspect intermediate results
-- Can reprocess specific dates without restarting pipeline
+Each stage reads the previous stage's markdown files (YAML frontmatter + body) and can
+be rerun for a given `--date`. Paths are relative to the working directory, so run
+from the repo root.
 
-### Core Pipeline Stages
+1. **Fetch** (`stages/fetch.py`) — YouTube Data API v3 search (`videos.py`), search
+   params from `config/base/youtube.yaml`; one markdown file per video.
+2. **Assess** (`stages/assess.py`) — sends id/title/description to Claude as CSV, gets
+   happiness 1–5 plus reasoning (prompts in `prompts.py`).
+3. **Enhance** (`stages/enhance.py`) — for happiness ≥ threshold (default 3), Claude
+   rewrites the description without clickbait, spam and promotion.
+4. **Report** (`stages/report.py`) — HTML report from `templates/daily_report.html`
+   (Jinja, autoescaped) and parquet exports under `parquet/`.
+5. **Web player** (`web/`) — Flask app + static export; YouTube embed with
+   recommendations disabled.
 
-1. **Fetch Stage** (`stages/fetch.py`)
-   - Uses YouTube Data API v3 to search for videos
-   - Configurable by category, duration, region, etc.
-   - Saves each video as markdown file with frontmatter
-   - Results stored in `stages/fetch/YYYY-MM-DD/`
-   - Legacy data in `data/fetched/`
+### Key modules
 
-2. **Assess Stage** (`stages/assess.py`)
-   - Loads videos from fetch stage
-   - Sends video metadata to Claude API in CSV format
-   - Returns happiness scores (1-5 scale)
-   - Uses configurable prompts from `prompts.py`
-   - Updates markdown files with happiness scores and reasoning
-   - Saves to `stages/assess/YYYY-MM-DD/`
-
-3. **Enhance Stage** (`stages/enhance.py`)
-   - Loads videos with happiness ≥ threshold (default: 3)
-   - Generates improved descriptions via Claude
-   - Removes clickbait, spam, and promotional content
-   - Saves enhanced versions to `stages/enhance/YYYY-MM-DD/`
-
-4. **Report Stage** (`stages/report.py`)
-   - Generates HTML report with all enhanced videos
-   - Exports analytics to Parquet format
-   - Creates visualizations and statistics
-   - Saves report to `stages/report/YYYY-MM-DD.html`
-   - Exports parquet files to `parquet/` directory
-
-5. **Web Player** (`web/`)
-   - Flask-based web interface for video playback
-   - Controlled YouTube embed with disabled recommendations
-   - Playlist navigation and search functionality
-   - Only shows curated videos from the pipeline
-   - Supports both local development (Flask) and static deployment (GitHub Pages)
-
-### Key Components
-
-- **API Integration**: 
-  - YouTube API credentials in `gkey.json` and `YTKEY` env var
-  - Claude API via `ANTHROPIC_API_KEY` env var
-  
-- **Data Flow**:
-  - All data exchange between modules uses pandas DataFrames
-  - CSV format for Claude API communication
-  - JSON storage for raw YouTube data
-  
-- **Configuration**:
-  - Environment variables loaded from `.env`
-  - uv for dependency management (Python >=3.12, <3.13)
+- `cli/commands.py` — click entry point `happytube`.
+- `config/settings.py` (pydantic settings from `.env`), `config/config_manager.py`
+  (YAML from `config/base/`).
+- `models/markdown.py` (`MarkdownFile`), `models/video.py` (`Video`, parquet export).
+- `utils/` — text-script detection, `utc_now_iso()`, `first_text()` for Claude
+  responses, logging setup. `paths.py` — `PROJECT_ROOT`.
 
 ### Storage Structure
 ```
@@ -205,7 +200,7 @@ logs/
 ├── YYYY-MM-DD.log     # Daily pipeline logs
 └── cron.log           # Cron job logs
 
-# Legacy data (being phased out)
+# Legacy data (git-ignored; the web player still reads data/fetched/)
 data/
 ├── categories.json      # YouTube category definitions
 └── fetched/
@@ -213,7 +208,7 @@ data/
     └── videos/         # Video details
 
 # Web player
-happytube/web/
+src/happytube/web/
 ├── server.py           # Flask backend (dev mode)
 ├── export.py           # Static export script
 ├── static/             # Static assets & deployment files
@@ -259,122 +254,23 @@ Configuration files are stored in `config/base/` (if they exist):
   - Region codes
   - Video duration filters
 
-## Common Workflows
-
-### Daily Video Processing
-
-```bash
-# Run the complete pipeline for today
-happytube run-all --category Music --max-videos 50
-
-# Or use the automation script
-./scripts/daily_run.sh
-```
-
-### Reprocessing Old Data
-
-```bash
-# Reprocess videos from a specific date
-happytube assess --date 2025-11-15
-happytube enhance --date 2025-11-15
-happytube report --date 2025-11-15
-```
-
-### Testing Different Categories
-
-```bash
-# Fetch music videos
-happytube fetch --category Music --max-videos 50
-
-# Fetch educational content
-happytube fetch --category Education --max-videos 30
-
-# Fetch entertainment videos
-happytube fetch --category Entertainment --max-videos 50
-```
-
-### Checking Pipeline Status
-
-```bash
-# View status for today
-happytube status
-
-# View status for a specific date
-happytube status --date 2025-11-15
-```
-
-### Inspecting Results
-
-```bash
-# View fetched videos
-ls stages/fetch/2025-11-16/
-cat stages/fetch/2025-11-16/video_abc123.md
-
-# View assessed videos (with happiness scores)
-cat stages/assess/2025-11-16/video_abc123.md
-
-# View enhanced videos
-cat stages/enhance/2025-11-16/video_abc123.md
-
-# Open the daily report in browser
-open stages/report/2025-11-16.html
-```
-
 ## Troubleshooting
 
-### Configuration Issues
+- Missing credentials: check `.env` has `YTKEY` and `ANTHROPIC_API_KEY`.
+- Stage failed: read `logs/YYYY-MM-DD.log`, inspect `stages/<stage>/<date>/`, fix,
+  rerun just that stage.
+- Fetch returns 0 videos: YouTube quota (10,000 units/day), key validity, category.
+- Debug logging: `LOG_LEVEL=DEBUG uv run happytube run-all`.
 
-**Problem**: Missing API credentials
-```bash
-# Check if .env file exists and has required keys
-cat .env | grep -E "YTKEY|ANTHROPIC_API_KEY"
-```
+## Notes
 
-**Solution**: Create or update `.env` file with valid API keys
-
-### Pipeline Errors
-
-**Problem**: Stage fails midway
-```bash
-# Check the logs
-cat logs/$(date +%Y-%m-%d).log
-
-# Inspect the stage directory
-ls -la stages/fetch/$(date +%Y-%m-%d)/
-```
-
-**Solution**: Fix the issue and rerun just that stage
-
-### No Videos Found
-
-**Problem**: Fetch stage returns 0 videos
-- Check YouTube API quota (10,000 units/day)
-- Verify API key is valid
-- Check network connectivity
-- Try different search category
-
-### Claude API Errors
-
-**Problem**: Assess or Enhance stage fails
-- Verify ANTHROPIC_API_KEY is valid
-- Check Claude API rate limits
-- Review prompt format in logs
-- Ensure sufficient API credits
-
-### Debug Mode
-
-Run with increased logging:
-```bash
-export LOG_LEVEL=DEBUG
-happytube run-all --category Music
-```
-
-## Important Notes
-
-- The project uses modern Python tooling (uv, Ruff) instead of traditional pip/flake8
-- All async operations and API calls should include proper error handling
-- Data processing uses markdown files with YAML frontmatter for stage-based architecture
-- Legacy CSV format is still used for Claude API communication
-- The happiness scoring system uses a 1-5 scale where ≥3 is considered "happy"
-- Each stage can be run independently for debugging or reprocessing
-- Logs are stored in `logs/` directory with daily rotation
+- ty is in beta — may produce false positives. Prefer `# ty: ignore[rule]` over blanket suppression.
+- The commit hook auto-fixes and restages files. Only blocks on unfixable issues.
+- Don't run pytest (or `poe check`) concurrently in one checkout: the runs share
+  `.coverage` and the combine step can fail with `table coverage_schema already exists`.
+- gerenuk diffs the **working tree** against `origin/main`, so unstaged edits count, and
+  any commit touching `pyproject.toml` or `uv.lock` runs the full suite. `--base HEAD`
+  scopes it to the commit itself.
+- ty-find's index goes stale after the hook's `ruff format` rewrites a file. The tell is
+  `tyf refs <sym>` listing only the definition, or gerenuk reporting `selected` with an
+  empty list. `uv run tyf daemon restart` fixes it.

@@ -19,7 +19,7 @@ A Python application that analyzes YouTube videos to identify and enhance "happy
 
 ```bash
 # Install dependencies
-poetry install
+uv sync
 
 # Set up environment variables (.env file)
 YTKEY=your_youtube_api_key
@@ -49,7 +49,7 @@ happytube --help
 
 ```bash
 # Run the legacy main pipeline
-poetry run python -m happytube.main
+uv run happytube run-all
 ```
 
 ### Daily Automation
@@ -80,19 +80,19 @@ Deploy your curated video collection to GitHub Pages:
 
 ```bash
 # Export videos to static files
-poetry run python -m happytube.web.export
+uv run python -m happytube.web.export
 
 # Or use the interactive deployment script
 ./scripts/deploy_web.sh
 ```
 
-See `happytube/web/DEPLOYMENT.md` for detailed deployment instructions including:
+See `src/happytube/web/DEPLOYMENT.md` for detailed deployment instructions including:
 - GitHub Pages setup
 - Netlify/Vercel deployment
 - GitHub Actions automation
 - Custom domains
 
-See `happytube/web/README.md` for player details.
+See `src/happytube/web/README.md` for player details.
 
 ## Modernized Architecture
 
@@ -153,7 +153,7 @@ Configuration files can be created in `config/base/` to customize:
 - Processing thresholds
 - Model configurations
 
-See `docs/modernization-plan.md` for detailed architecture documentation.
+See `docs/architecture.md` (and the historical `docs/research/modernization-plan.md`).
 
 ## Pipeline Details
 
@@ -177,39 +177,29 @@ The pipeline processes videos through four stages:
 
 ```bash
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run specific test file
-poetry run pytest tests/test_pipeline.py -v
+uv run pytest tests/test_pipeline.py -v
 
 # Run specific test
-poetry run pytest tests/test_pipeline.py::TestMarkdownFile::test_create_and_save -v
+uv run pytest tests/test_pipeline.py::TestMarkdownFile::test_create_and_save -v
 
-# Run with coverage
-poetry run pytest --cov=happytube --cov-report=html
+# Run with coverage (on by default via pytest addopts)
+uv run pytest --cov=src --cov-report=html
 ```
 
 ### Code Quality
 
 ```bash
-# Lint code
-poetry run ruff check .
+# Once per clone: install the madoqua commit hook
+uv run poe setup
 
-# Format code
-poetry run ruff format .
+# Lint, typecheck, test-lint, clone detection, vulns, then tests
+uv run poe check
 
-# Run both linting and formatting
-poetry run ruff check . && poetry run ruff format .
-```
-
-### Interactive Development
-
-```bash
-# Start IPython with happytube modules loaded
-./scripts/ip.sh
-
-# Or manually
-ipython -i happytube/ip.py
+# Auto-format and fix lint issues
+uv run poe fix
 ```
 
 ### Inspecting Pipeline Data
@@ -230,14 +220,14 @@ open stages/report/$(date +%Y-%m-%d).html
 
 ## Contributing
 
-See `docs/modernization-plan.md` for the architectural vision and implementation phases.
+See `docs/plan.md` for the current plan, `docs/constitution.md` and
+`docs/architecture.md` for the why and how, and `docs/decisions/` for decision records.
 
 ## TODO (Future Enhancements)
 - parse `thumbnails`, put the middle one into the df
 - store stats about the call to claude - how long it took, tokens used
 - experiment with more sophisticated prompts
 - try various models, observe the happiness distribution
-- implement async processing with queues for better performance
 
 
 ## https://www.googleapis.com/youtube/v3/search

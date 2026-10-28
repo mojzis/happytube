@@ -5,36 +5,202 @@ description = "nicer videos from youtube"
 authors = [{ name = "mojzis" }]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12"
 dependencies = [
-    "dlt[duckdb]>=1.2.0",
-    "google-auth-oauthlib>=1.2.1",
-    "google-api-python-client>=2.149.0",
     "rich>=13.9.2",
-    "ipython>=8.28.0",
     "python-dotenv>=1.0.1",
     "pandas>=2.2.3",
     "anthropic>=0.37.1",
-    "pytest>=8.3.3",
     "flask>=3.1.2",
+    "pydantic>=2.12",
     "pydantic-settings>=2.12.0",
     "jinja2>=3.1.4",
     "pyarrow>=18.1.0",
     "click>=8.1.7",
-]
-
-[project.optional-dependencies]
-dev = [
-    "marimo>=0.9.14",
-    "ruff>=0.7.1",
+    "pyyaml>=6.0",
+    "requests>=2.32",
 ]
 
 [project.scripts]
 happytube = "happytube.cli.commands:cli"
 
 [tool.hatch.build.targets.wheel]
-packages = ["happytube"]
+packages = ["src/happytube"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    # aesop toolbox
+    "madoqua",
+    "gerenuk",
+    "biston",
+    "zorilla",
+    "pycoati",
+    "ty-find",
+    # core
+    "ruff",
+    "ty",
+    "pytest",
+    "pytest-cov",
+    "vulture",
+    "deptry",
+    "interrogate",
+    "poethepoet",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "S", "SIM", "C4", "DTZ", "T20", "PTH", "ERA", "PL", "TRY", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "PLR2004"]
+# Prompt texts are long natural-language literals sent to Claude verbatim; wrapping
+# or stripping their whitespace would change the prompt.
+"src/happytube/prompts.py" = ["E501", "W291"]
+# Config loaders raise built-in errors with a contextual message (file, key name);
+# a custom exception class per message would add nothing.
+"src/happytube/config/**" = ["TRY003"]
+
+[tool.ruff.format]
+
+[tool.ty]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=src --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.vulture]
+paths = ["src"]
+# Framework-registered code vulture cannot see being used: click commands, Flask
+# routes and pydantic validators are called through their decorators.
+ignore_decorators = ["@cli.command", "@app.route", "@field_validator"]
+# Pydantic model fields and settings are read via model_dump/validation, not by
+# attribute access in src/.
+ignore_names = [
+    "model_config",
+    "environment",
+    "channel",
+    "duration",
+    "fetched_at",
+    "script_type",
+    "channel_id",
+    "published_at",
+    "happiness_reasoning",
+    "assessed_at",
+    "enhanced_at",
+]
+
+[tool.deptry]
+known_first_party = ["happytube"]
+# pyarrow is the parquet engine pandas loads at runtime for DataFrame.to_parquet.
+per_rule_ignores = { DEP002 = ["pyarrow"] }
+
+[tool.interrogate]
+fail_under = 0
+
+[tool.madoqua]
+# fix phase keeps the defaults: ruff check --fix, ruff format (re-staged).
+# check phase keeps the defaults (ruff check, ty check) and adds:
+extend_check = [
+    # madoqua appends the staged .py files. biston reads them as --focus-args focus files
+    # (only clone pairs touching a staged file); zorilla lints exactly those files.
+    { name = "biston", cmd = "biston scan --focus-args", timeout_s = 60, max_output_lines = 80 },
+    { name = "zorilla", cmd = "zorilla check", timeout_s = 30, max_output_lines = 80 },
+    # gerenuk scopes itself from the git diff, so no file list.
+    # -o addopts= drops the --cov from [tool.pytest.ini_options]; the hook never reads coverage.
+    { name = "gerenuk", cmd = "gerenuk run -- -q -o addopts=", pass_files = false, timeout_s = 120, max_output_lines = 120 },
+]
+
+[tool.biston.scan]
+exclude = ["**/tests/**"]
+
+[tool.poe]
+verbosity = -1
+
+[tool.poe.tasks.fix]
+sequence = [
+    { cmd = "ruff format --quiet ." },
+    { cmd = "ruff check --fix --quiet ." },
+]
+help = "Auto-fix: format and lint"
+
+[tool.poe.tasks.lint]
+cmd = "ruff check ."
+help = "Run linter (no fix)"
+
+[tool.poe.tasks.typecheck]
+cmd = "ty check"
+help = "Run type checker"
+
+[tool.poe.tasks.test]
+cmd = "pytest -q --tb=short"
+help = "Run tests"
+
+[tool.poe.tasks.vulns]
+shell = "uvx pysentry-rs . || true"
+interpreter = "bash"
+help = "Dependency vulnerability scan"
+
+[tool.poe.tasks.test-lint]
+cmd = "zorilla check ."
+help = "Lint tests for smells (zorilla)"
+
+[tool.poe.tasks.clones]
+cmd = "biston scan ."
+help = "Clone detection (biston)"
+
+[tool.poe.tasks.dead-code]
+cmd = "vulture src"
+help = "Dead code detection"
+
+[tool.poe.tasks.unused-deps]
+cmd = "deptry ."
+help = "Unused dependency check"
+
+[tool.poe.tasks._check-parallel]
+shell = """
+  ruff check . &
+  ty check &
+  zorilla check . &
+  biston scan . &
+  (uvx pysentry-rs . || true) &
+  wait
+"""
+interpreter = "bash"
+
+[tool.poe.tasks.check]
+sequence = [
+    { ref = "_check-parallel" },
+    { ref = "test" },
+]
+help = "Run all checks (parallel where possible)"
+
+[tool.poe.tasks.check-all]
+sequence = [
+    { ref = "lint" },
+    { ref = "typecheck" },
+    { ref = "vulns" },
+    { ref = "test-lint" },
+    { ref = "clones" },
+    { ref = "dead-code" },
+    { ref = "unused-deps" },
+    { ref = "test" },
+]
+ignore_fail = true
+help = "Run all checks (report all failures)"
+
+[tool.poe.tasks.setup]
+cmd = "madoqua install"
+help = "Install the madoqua commit hook (sets core.hooksPath)"
