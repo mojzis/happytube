@@ -1,0 +1,12 @@
+slug: krnap
+name: Krkonošský národní park
+kind: park
+languages:
+- cs
+handle: '@spravakrnap'
+channel_id: null
+url: https://www.krnap.cz
+added_by: claude-scout
+added_at: '2026-10-29T08:21:38.269632Z'
+notes: 'Official: krnap.cz footer links youtube.com/user/spravakrnap (checked 2026-10-29).
+  Handle taken from that channel page; check ''resolved to'' after evidence.'
