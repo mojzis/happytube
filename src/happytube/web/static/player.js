@@ -152,6 +152,21 @@ function markCurrent() {
     });
 }
 
+/**
+ * YouTube's fullscreen button makes the iframe fullscreen; turn the phone to
+ * landscape with it, and let it rotate freely again on exit. Android browsers
+ * only — iOS has no orientation lock (its native player rotates on its own).
+ */
+function onFullscreenChange() {
+    const orientation = screen.orientation;
+    if (!orientation?.lock) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        orientation.lock('landscape').catch(() => {}); // desktop: not supported
+    } else {
+        orientation.unlock?.();
+    }
+}
+
 function openList() {
     if (videos.length === 0) return;
     $('sheet').showModal();
@@ -160,6 +175,8 @@ function openList() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadVideos();
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     const sheet = $('sheet');
     $('listBtn').addEventListener('click', openList);
     $('cornerBtn').addEventListener('click', openList);
