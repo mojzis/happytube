@@ -1,0 +1,11 @@
+slug: np-ceske-svycarsko
+name: Národní park České Švýcarsko
+kind: park
+languages:
+- cs
+handle: '@NPceskesvycarsko'
+channel_id: null
+url: https://www.npcs.cz
+added_by: claude-scout
+added_at: '2026-10-29T08:21:43.042077Z'
+notes: 'Official: npcs.cz footer links youtube.com/@NPceskesvycarsko (checked 2026-10-29).'
